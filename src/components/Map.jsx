@@ -118,6 +118,9 @@ const Map = forwardRef((props, ref) => {
   const shiftMap = (x, y) => {
     window.NAV2D.canvas.shift(x, y);
   };
+  // Event listener for the Initialize Pose button
+
+
 
   return (
     <div

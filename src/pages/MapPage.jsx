@@ -300,6 +300,12 @@ const MapPage = () => {
     filesModalHeader.current = null;
     filesModalPlaceholder.current = null;
   };
+  // In your map.jsx or a shared initialization file
+  window.isInitialPoseMode = false;
+  const init_pose = () => {
+    window.isInitialPoseMode = true;
+    console.log("Click on the map to set the initial pose of the robot.");
+  };
 
   return (
     <>
@@ -398,6 +404,7 @@ const MapPage = () => {
                   <span className="iconGroup" />
                   <span className="mx-auto">Delete</span>
                 </Button>
+                <button onClick={init_pose} className="bg-black text-white p-2 rounded-2xl" id="initializePoseButton">Initialize Pose</button>
               </div>
             </div>
           </div>

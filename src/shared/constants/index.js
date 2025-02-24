@@ -1,12 +1,14 @@
 export const AppConfig = {
   ROSBRIDGE_SERVER_IP: "127.0.0.1",
   ROSBRIDGE_SERVER_PORT: "9090",
-  CAMERA_PORT: "8090",
+  CAMERA_PORT: "8080",
   RECONNECTION_TIME: 1000,
 
   CMD_VEL_TOPIC: "/cmd_vel",
-  ROBOT_POSE_TOPIC: "/roboteq/odom",
-  ROBOT_VELOCITY_TOPIC: "/roboteq/odom",
+  ROBOT_POSE_TOPIC: "/odom",
+  ROBOT_VELOCITY_TOPIC: "/odom",
+  // ROBOT_POSE_TOPIC: "/roboteq/odom",
+  // ROBOT_VELOCITY_TOPIC: "/roboteq/odom",
   UI_OPERATION_TOPIC: "/ui_operation",
   UI_MESSAGE_TOPIC: "/ui_message",
   UI_OPERATION: "/ui_operation",

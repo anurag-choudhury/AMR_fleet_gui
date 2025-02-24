@@ -1,3 +1,4 @@
+// import ROSLIBB from 'roslib'
 window.NAV2D = window.NAV2D || {};
 
 window.NAV2D.pointsArray = [];
@@ -32,10 +33,10 @@ window.NAV2D.checkScale = () => {
 const intervalId = setInterval(window.NAV2D.checkScale, 100);
 
 window.NAV2D.InitMap = (ros) => {
-  console.log("i have been called")
+  console.log("Initializing map...");
   const topic = "/map";
 
-  /* setup a client to get the map */
+  /* Setup a client to get the map */
   const client = new window.ROS2D.OccupancyGridClient({
     ros,
     rootObject: window.NAV2D.canvas.scene,
@@ -54,6 +55,7 @@ window.NAV2D.InitMap = (ros) => {
       return;
     }
 
+    // Scale and shift the map correctly
     window.NAV2D.canvas.scaleToDimensions(
       client.currentGrid.width,
       client.currentGrid.height,
@@ -63,19 +65,16 @@ window.NAV2D.InitMap = (ros) => {
       client.currentGrid.pose.position.y,
     );
 
-    window.NAV2D.pointsArray = drawPoints(
-      window.NAV2D.pointsFromTopic,
-      window.NAV2D.canvas.scene,
-    );
+    // Log map pose for debugging
+    console.log("Map Pose:", client.currentGrid.pose);
   });
 
   if (!window.NAV2D.mapInited) {
     window.NAV2D.mapInited = true;
-    console.log(window.NAV2D)
     customnavigator(ros);
+    init_pose_fn(ros)
   }
 };
-
 /* Cleaning map */
 window.NAV2D.ClearMap = () => {
   window.NAV2D.pointsArray.forEach((marker) =>
@@ -87,7 +86,6 @@ window.NAV2D.ClearMap = () => {
 const drawPoints = (points, canvas) => {
   if (!(points && canvas)) return;
   window.NAV2D.ClearMap();
-  console.log("draw point created")
 
   window.NAV2D.pointsArray = points.map((point) => {
     const defaultPointItem = serializePoint(point, canvas);
@@ -99,11 +97,11 @@ const drawPoints = (points, canvas) => {
 
 const customnavigator = (ros) => {
 
-  // if (!ros || !window.NAV2D.canvas) {
-  //   console.error("ROS or canvas is not initialized");
-  //   return;
-  // }
-  console.log("navigator called")
+  if (!ros || !window.NAV2D.canvas) {
+    console.error("ROS or canvas is not initialized");
+    return;
+  }
+
   const canvas = window.NAV2D.canvas.scene;
 
   /* Send message about map initialization */
@@ -112,13 +110,264 @@ const customnavigator = (ros) => {
     name: "/ui_message",
     messageType: "std_msgs/String",
   });
-  /*
+
   messageTopic.publish(
     new window.ROSLIB.Message({ data: "Initialization completed" }),
   );
- */
 
-  /* Receiving array of points*/
+  // // const tfClient = new ROSLIB.TFClient({
+  // //   ros: ros,
+  // //   fixedFrame: "map", // Map frame
+  // //   angularThres: 0.01,
+  // //   transThres: 0.01,
+  // // });
+
+  // // tfClient.subscribe("base_link", (transform) => {
+  // //   console.log("subscribed tf_clinet")
+  // //   // Apply the transform to the robot's pose
+  // //   robotPose.x = transform.translation.x;
+  // //   robotPose.y = transform.translation.y;
+  // //   robotPose.theta = transform.rotation.z; // Yaw in radians
+  // // });
+  // /* Receiving array of points*/
+  // // View Laser Scanner Button
+  // // document.getElementById('viewLaserButton').addEventListener('click', () => {
+  // Subscribe to the /scan topic
+
+  const scanTopic = new ROSLIB.Topic({
+    ros: ros,
+    name: "/scan",
+    messageType: "sensor_msgs/LaserScan",
+  });
+
+  // Container for laser scan points
+  const laserScanContainer = new createjs.Container();
+  canvas.addChild(laserScanContainer);
+
+  let robotPose = { x: 0, y: 0, theta: 0 };
+
+  // Store past laser scan points
+  const laserScanPoints = [];
+  const MAX_SCAN_POINTS = 1000; // Prevent excessive memory usage
+
+
+  // Subscribe to robot odometry to update pose
+  const odomTopic = new ROSLIB.Topic({
+    ros: ros,
+    name: "/odom",
+    messageType: "nav_msgs/Odometry",
+  });
+  const quaternionToTheta = (qx, qy, qz, qw) => {
+    return Math.atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz));
+  };
+
+
+  const tfListener = new window.ROSLIB.Topic({
+    ros: ros,
+    name: "/tf",
+    messageType: "tf2_msgs/TFMessage",
+  });
+
+  let mapToOdom = null;
+  let odomToBaseLink = null;
+
+  tfListener.subscribe((message) => {
+    message.transforms.forEach((transform) => {
+      if (transform.header.frame_id === "map" && transform.child_frame_id === "odom") {
+        mapToOdom = transform.transform;
+      }
+      if (transform.header.frame_id === "odom" && transform.child_frame_id === "ebot_base_link") {
+        odomToBaseLink = transform.transform;
+      }
+    });
+
+    if (mapToOdom && odomToBaseLink) {
+      // Extract translation and rotation from map -> odom
+      const x_map = mapToOdom.translation.x;
+      const y_map = mapToOdom.translation.y;
+      const theta_map = quaternionToTheta(
+        mapToOdom.rotation.x,
+        mapToOdom.rotation.y,
+        mapToOdom.rotation.z,
+        mapToOdom.rotation.w
+      );
+
+      // Extract translation and rotation from odom -> base_link
+      const x_odom = odomToBaseLink.translation.x;
+      const y_odom = odomToBaseLink.translation.y;
+      const theta_odom = quaternionToTheta(
+        odomToBaseLink.rotation.x,
+        odomToBaseLink.rotation.y,
+        odomToBaseLink.rotation.z,
+        odomToBaseLink.rotation.w
+      );
+
+      // Compute final position (map → base_link transformation)
+      const x_final = x_map + x_odom * Math.cos(theta_map) - y_odom * Math.sin(theta_map);
+      const y_final = y_map + x_odom * Math.sin(theta_map) + y_odom * Math.cos(theta_map);
+      let theta_final = theta_map + theta_odom;
+
+      // Normalize angle between -π and π
+      theta_final = Math.atan2(Math.sin(theta_final), Math.cos(theta_final));
+      const theta_quat = thetaToQuaternion(theta_final)
+      // Update Robot Marker
+      robotMarker.x = x_final;
+      robotMarker.y = -y_final; // Flip Y as needed
+      robotMarker.scaleX = 1.0 / canvas.scaleX;
+      robotMarker.scaleY = 1.0 / canvas.scaleY;
+      robotMarker.rotation = canvas.rosQuaternionToGlobalTheta(theta_quat); // Fix orientation flip
+      // robotMarker.rotation = theta_final; // Fix orientation flip
+      robotMarker.visible = true;
+
+
+    }
+    function thetaToQuaternion(theta) {
+      // Normalize theta to the range [-π, π]
+      const thetaNormalized = Math.atan2(Math.sin(theta), Math.cos(theta));
+
+      // Convert to quaternion
+      return {
+        x: 0,
+        y: 0,
+        z: Math.sin(thetaNormalized / 2),
+        w: Math.cos(thetaNormalized / 2),
+      };
+    }
+  });
+
+
+
+  // const laserScanContainer = new createjs.Container();
+  // canvas.addChild(laserScanContainer);
+
+  // let robotPose = { x: 0, y: 0, theta: 0 };
+
+  // Subscribe to Odometry topic
+  odomTopic.subscribe((odom) => {
+    robotPose.x = odom.pose.pose.position.x;
+    robotPose.y = odom.pose.pose.position.y;
+    robotPose.theta = getYawFromQuat(odom.pose.pose.orientation);
+  });
+
+  // Subscribe to Laser Scan topic
+  scanTopic.subscribe((message) => {
+    laserScanContainer.removeAllChildren(); // Clear previous scan points
+
+    for (let i = 0; i < message.ranges.length; i++) {
+      const scanAngle = message.angle_min + i * message.angle_increment;
+      const range = message.ranges[i];
+
+      if (range < message.range_max && range > message.range_min) {
+        // Convert from Laser Frame (Polar to Cartesian)
+        let localX = range * Math.cos(scanAngle);
+        let localY = range * Math.sin(scanAngle);
+
+        // Transform using Odometry
+        const globalX = robotPose.x + (localX * Math.cos(robotPose.theta) - localY * Math.sin(robotPose.theta));
+        const globalY = robotPose.y + (localX * Math.sin(robotPose.theta) + localY * Math.cos(robotPose.theta));
+
+        // Draw laser scan point
+        const point = new createjs.Shape();
+        point.graphics.beginFill("red").drawCircle(0, 0, 0.02);
+        point.x = globalX;
+        point.y = globalY;
+
+        laserScanContainer.addChild(point);
+      }
+    }
+
+    // Update Canvas
+    canvas.update();
+  });
+
+  // Function to extract yaw from quaternion
+  function getYawFromQuat(q) {
+    let siny_cosp = 2 * (q.w * q.z + q.x * q.y);
+    let cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z);
+    return Math.atan2(siny_cosp, cosy_cosp);
+  }
+
+
+  // });
+  // Subscribe to the /tf topic
+  // const scanTopic = new ROSLIB.Topic({
+  //   ros: ros,
+  //   name: "/scan",
+  //   messageType: "sensor_msgs/LaserScan",
+  // });
+
+  // const tfTopic = new ROSLIB.Topic({
+  //   ros: ros,
+  //   name: "/tf",
+  //   messageType: "tf2_msgs/TFMessage",
+  // });
+
+  // const laserScanContainer = new createjs.Container();
+  // canvas.addChild(laserScanContainer);
+
+  // const laserScanPoints = [];
+  // const MAX_SCAN_POINTS = 1000;
+
+  // let laserTransform = { x: 0, y: 0, theta: 0 };
+  // let robotTransform = { x: 0, y: 0, theta: 0 };
+
+  // const laserFrame = "base_laser";
+  // const robotFrame = "base_link"; // Adjust based on your robot's tf tree
+
+  // // Subscribe to /tf topic to track transformations
+  // tfTopic.subscribe((tfMessage) => {
+  //   tfMessage.transforms.forEach((tf) => {
+  //     if (tf.child_frame_id === laserFrame) {
+  //       laserTransform.x = tf.transform.translation.x;
+  //       laserTransform.y = tf.transform.translation.y;
+  //       laserTransform.theta = getYawFromQuat(tf.transform.rotation);
+  //     }
+  //     if (tf.child_frame_id === robotFrame) {
+  //       robotTransform.x = tf.transform.translation.x;
+  //       robotTransform.y = tf.transform.translation.y;
+  //       robotTransform.theta = getYawFromQuat(tf.transform.rotation);
+  //     }
+  //   });
+  // });
+
+  // scanTopic.subscribe((message) => {
+  //   laserScanContainer.removeAllChildren();
+
+  //   for (let i = 0; i < message.ranges.length; i++) {
+  //     const scanAngle = message.angle_min + i * message.angle_increment;
+  //     const range = message.ranges[i];
+
+  //     if (range < message.range_max && range > message.range_min) {
+  //       let localX = range * Math.cos(scanAngle);
+  //       let localY = range * Math.sin(scanAngle);
+
+  //       // Transform LaserScan into the robot frame (base_link)
+  //       let laserX = laserTransform.x + (localX * Math.cos(laserTransform.theta) - localY * Math.sin(laserTransform.theta));
+  //       let laserY = laserTransform.y + (localX * Math.sin(laserTransform.theta) + localY * Math.cos(laserTransform.theta));
+
+  //       // Transform into the world frame (map/odom)
+  //       const globalX = robotTransform.x + (laserX * Math.cos(robotTransform.theta) - laserY * Math.sin(robotTransform.theta));
+  //       const globalY = robotTransform.y + (laserX * Math.sin(robotTransform.theta) + laserY * Math.cos(robotTransform.theta));
+
+  //       // Draw laser scan point
+  //       const point = new createjs.Shape();
+  //       point.graphics.beginFill("red").drawCircle(0, 0, 0.02);
+  //       point.x = globalX;
+  //       point.y = globalY;
+
+  //       laserScanContainer.addChild(point);
+  //     }
+  //   }
+
+  //   canvas.update();
+  // });
+
+  // function getYawFromQuat(q) {
+  //   let siny_cosp = 2 * (q.w * q.z + q.x * q.y);
+  //   let cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z);
+  //   return Math.atan2(siny_cosp, cosy_cosp);
+  // }
+
 
   createSubscribeTopic(
     ros,
@@ -146,14 +395,15 @@ const customnavigator = (ros) => {
   canvas.addChild(robotMarker);
 
   /* Robot position watcher */
-  createSubscribeTopic(ros, "/roboteq/odom", "nav_msgs/msg/Odometry", (data) => {
+  createSubscribeTopic(ros, "/odom", "nav_msgs/msg/Odometry", (data) => {
     const pose = data.pose.pose;
-    robotMarker.x = pose.position.x;
-    robotMarker.y = -pose.position.y;
-    robotMarker.scaleX = 1.0 / canvas.scaleX;
-    robotMarker.scaleY = 1.0 / canvas.scaleY;
-    robotMarker.rotation = canvas.rosQuaternionToGlobalTheta(pose.orientation);
-    robotMarker.visible = true;
+    console.log(pose)
+    // robotMarker.x = pose.position.x;
+    // robotMarker.y = -pose.position.y;
+    // robotMarker.scaleX = 1.0 / canvas.scaleX;
+    // robotMarker.scaleY = 1.0 / canvas.scaleY;
+    // robotMarker.rotation = canvas.rosQuaternionToGlobalTheta(pose.orientation);
+    // robotMarker.visible = true;
   });
 
   /* MOUSE EVENT SECTION */
@@ -331,12 +581,10 @@ const createSubscribeTopic = (ros, name, messageType, callback) => {
     messageType,
   };
 
-  if (name === "/roboteq/odom") {
+  if (name === "/odom") {
     topicObject.throttle_rate = 1;
   }
-  console.log("subscriber fn is called")
   const topic = new window.ROSLIB.Topic(topicObject);
-  console.log(topic.subscribe(callback))
   topic.subscribe(callback);
   return topic;
 };
@@ -367,6 +615,7 @@ const createCanvasPoint = (size, color) => {
 
 window.NAV2D.sendPointToRobot = (ros, time) => {
   const pointDetails = window.NAV2D.finishedPointItem;
+  console.log(pointDetails)
   const { hours, minutes } = time;
 
   const wayPoint = new window.ROSLIB.Topic({
@@ -418,7 +667,6 @@ window.NAV2D.sendPointToRobot = (ros, time) => {
 };
 
 const serializePoint = (point, canvas) => {
-  console.log("serialize point called")
   const defaultPointItem = createCanvasPoint(15, {
     r: 255,
     g: 0,
@@ -436,3 +684,185 @@ const serializePoint = (point, canvas) => {
 
   return defaultPointItem;
 };
+const init_pose_fn = (ros) => {
+  // Variables for Initialize Pose
+  // let isInitialPoseMode = false;
+  let initialPoseMousePressed = false;
+  let initialPoseMouseMoved = false;
+  let initialPosePositionVectorItem = null;
+  let initialPoseOrientationMarker = null;
+  console.log(window.NAV2D)
+  const canvas = window.NAV2D.canvas.scene
+
+  // Mouse down handler for Initialize Pose
+  const handleInitialPoseMouseDown = (event) => {
+    console.log(window.isInitialPoseMode)
+    if (!window.isInitialPoseMode) return; // Check the global flag
+    initialPoseMousePressed = true;
+    const positionItem = canvas.globalToRos(event.stageX, event.stageY);
+    initialPosePositionVectorItem = new window.ROSLIB.Vector3(positionItem);
+  };
+
+  const handleInitialPoseMouseMove = (event) => {
+    if (!initialPoseMousePressed || !window.isInitialPoseMode) return; // Check the global flag
+    initialPoseMouseMoved = true;
+
+    // Remove previous orientation marker (if any)
+    if (initialPoseOrientationMarker) {
+      canvas.removeChild(initialPoseOrientationMarker);
+    }
+
+    const currentPos = canvas.globalToRos(event.stageX, event.stageY);
+    const currentPositionVectorItem = new window.ROSLIB.Vector3(currentPos);
+
+    initialPoseOrientationMarker = createCanvasPoint(25, {
+      r: 0,
+      g: 255,
+      b: 0,
+      a: 1,
+    });
+
+    const xDelta = currentPositionVectorItem.x - initialPosePositionVectorItem.x;
+    const yDelta = currentPositionVectorItem.y - initialPosePositionVectorItem.y;
+    const thetaRadians = Math.atan2(xDelta, yDelta);
+    let thetaDegrees = thetaRadians * (180.0 / Math.PI);
+
+    if (thetaDegrees >= 0 && thetaDegrees <= 180) {
+      thetaDegrees += 270;
+    } else {
+      thetaDegrees -= 90;
+    }
+
+    initialPoseOrientationMarker.x = initialPosePositionVectorItem.x;
+    initialPoseOrientationMarker.y = -initialPosePositionVectorItem.y;
+    initialPoseOrientationMarker.rotation = thetaDegrees;
+    initialPoseOrientationMarker.scaleX = 1.0 / canvas.scaleX;
+    initialPoseOrientationMarker.scaleY = 1.0 / canvas.scaleY;
+    canvas.addChild(initialPoseOrientationMarker);
+  };
+
+  const handleInitialPoseMouseUp = (event) => {
+    if (!initialPoseMousePressed || !window.isInitialPoseMode) return; // Check the global flag
+    initialPoseMousePressed = false;
+    initialPoseMouseMoved = false;
+
+    const goalPos = canvas.globalToRos(event.stageX, event.stageY);
+    const goalPosVec3 = new window.ROSLIB.Vector3(goalPos);
+    const xDelta = goalPosVec3.x - initialPosePositionVectorItem.x;
+    const yDelta = goalPosVec3.y - initialPosePositionVectorItem.y;
+    let thetaRadians = calculateThetaRadians(xDelta, yDelta);
+
+    const qz = Math.sin(-thetaRadians / 2.0);
+    const qw = Math.cos(-thetaRadians / 2.0);
+
+    const orientation = new window.ROSLIB.Quaternion({
+      x: 0,
+      y: 0,
+      z: qz,
+      w: qw,
+    });
+
+    const pose = new window.ROSLIB.Pose({
+      position: initialPosePositionVectorItem,
+      orientation,
+    });
+
+    // Publish the initial pose
+    publishInitialPose(pose);
+
+    // Reset mode and clean up
+    window.isInitialPoseMode = false; // Reset the global flag
+    canvas.removeChild(initialPoseOrientationMarker);
+  };
+
+  // Attach event listeners for Initialize Pose
+  canvas.addEventListener('stagemousedown', (event) => {
+    handleInitialPoseMouseDown(event);
+    canvas.addEventListener('stagemousemove', handleInitialPoseMouseMove);
+  });
+
+  canvas.addEventListener('stagemouseup', (event) => {
+    handleInitialPoseMouseUp(event);
+    canvas.removeEventListener('stagemousemove', handleInitialPoseMouseMove);
+  });
+
+  const publishInitialPose = async (pose) => {
+    // Function to get the latest TF timestamp
+    const getLatestTime = async () => {
+      return new Promise((resolve) => {
+        const tfTopic = new window.ROSLIB.Topic({
+          ros: ros,
+          name: '/tf',
+          messageType: 'tf2_msgs/TFMessage',
+        });
+
+        tfTopic.subscribe((message) => {
+          if (message.transforms.length > 0) {
+            const latestTransform = message.transforms[0];
+            resolve(latestTransform.header.stamp);
+          }
+          tfTopic.unsubscribe();
+        });
+      });
+    };
+
+    const latestTime = await getLatestTime();
+    const sec = latestTime.sec;
+    const nanosec = latestTime.nanosec;
+
+    const covariance = [
+      0.25, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.25, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0685
+    ];
+
+    // Create a publisher for /initialpose
+    const initialPoseTopic = new window.ROSLIB.Topic({
+      ros: ros,
+      name: '/initialpose',
+      messageType: 'geometry_msgs/PoseWithCovarianceStamped',
+    });
+
+    // Create the initial pose message
+    const initialPoseMessage = new window.ROSLIB.Message({
+      header: {
+        frame_id: 'map',
+        stamp: { sec, nanosec },
+      },
+      pose: {
+        pose: pose,
+        covariance: covariance,
+      },
+    });
+
+    // Publish the initial pose to /initialpose
+    initialPoseTopic.publish(initialPoseMessage);
+    console.log("Initial pose published:", initialPoseMessage);
+    // const robotMarker = new window.ROSLIB.Topic({
+    //   ros: ros,
+    //   name: '/tf', // Topic publishing transform data
+    //   messageType: 'tf2_msgs/TFMessage',
+    // });
+
+    // robotMarker.subscribe((message) => {
+    //   message.transforms.forEach((transform) => {
+    //     if (transform.header.frame_id === 'map' && transform.child_frame_id === 'ebot_base_link') {
+    //       console.log("hey")
+    //       const { x, y, z } = transform.transform.translation;
+    //       const { x: qx, y: qy, z: qz, w: qw } = transform.transform.rotation;
+
+    //       updateRobotMarker(x, y, z, qx, qy, qz, qw); // Update the marker position in GUI
+    //     }
+    //   });
+    // });
+
+  };
+
+
+
+
+
+}

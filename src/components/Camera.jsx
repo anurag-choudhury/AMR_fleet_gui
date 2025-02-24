@@ -1,15 +1,15 @@
 import React, { useEffect, useCallback, useState } from "react";
-import { AppConfig } from "../shared/constants/index";
+// import { AppConfig } from "../shared/constants/index";
 
 const Camera = () => {
   const [videoSrc, setVideoSrc] = useState("");
 
   const tryToConnectToCamera = useCallback(async () => {
-    const currentIP = window.location.hostname;
-    const currentUrl = window.location.href;
-    const ip = !currentUrl.includes("http://localhost:3000/")
-      ? currentIP
-      : AppConfig.ROSBRIDGE_SERVER_IP;
+    // const currentIP = window.location.hostname;
+    // const currentUrl = window.location.href;
+    // const ip = !currentUrl.includes("http://localhost:3000/")
+    //   ? currentIP
+    //   : AppConfig.ROSBRIDGE_SERVER_IP;
     // const videoSrcString = `http://${ip}:${AppConfig.CAMERA_PORT}/stream?topic=/usb_cam/image_raw`;
     const videoSrcString = `http://0.0.0.0:8080/stream?topic=/camera/image_raw`;
     // const videoSrcString = `http://${ip}:${AppConfig.CAMERA_PORT}/stream?topic=/camera/image_raw`;
