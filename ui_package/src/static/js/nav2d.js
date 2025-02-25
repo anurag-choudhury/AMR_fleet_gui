@@ -136,7 +136,7 @@ const customnavigator = (ros) => {
 
   const scanTopic = new ROSLIB.Topic({
     ros: ros,
-    name: "/scan",
+    name: "/filtered_scan",
     messageType: "sensor_msgs/LaserScan",
   });
 
