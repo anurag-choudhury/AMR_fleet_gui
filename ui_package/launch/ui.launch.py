@@ -2,10 +2,11 @@ from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import PathJoinSubstitution
-from launch_ros.substitutions import FindPackageShare
+from launch_ros.substitutions import FindPackageShare 
 import launch_ros.actions
 from launch.actions import ExecuteProcess
-
+import os
+from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
@@ -20,6 +21,10 @@ def generate_launch_description():
         'src', 
         'flask_app.py'
     ])
+    flask_dir =get_package_share_directory("ui_package")
+    flask_launch =IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(flask_dir,'launch', 'flask_launch.py'))
+            )
     # Include other launch files
     folder_handler_node=launch_ros.actions.Node(
             package='ui_package',
@@ -46,9 +51,10 @@ def generate_launch_description():
         folder_handler_node,
         rosbridge_server,
         way_points_navigation_launch,
-        ExecuteProcess(
-        cmd=['python3', flask_script],
-        output='screen'
-    ),
+        flask_launch
+    #      ExecuteProcess(
+    #      cmd=['python3', flask_script],
+    #      output='screen'
+    #  ),
         
     ])
