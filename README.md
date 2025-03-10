@@ -15,9 +15,9 @@ This React-based application provides functionality to control and management of
 
 ### Installation
 
-    git clone [(https://github.com/openAMRobot/OpenAMR_UI_dev)](https://github.com/openAMRobot/OpenAMR_UI_dev)
+    git clone [(https://github.com/anurag-choudhury/amr_fleet_gui.git)](https://github.com/anurag-choudhury/amr_fleet_gui.git)
     
-    cd OpenAMR_UI_dev
+    cd amr_fleet_gui
     
     npm install 
     

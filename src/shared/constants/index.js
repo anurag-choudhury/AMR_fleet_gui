@@ -18,6 +18,6 @@ export const AppConfig = {
   BATTERY_TOPIC: "/battery_status",
   CHARGE_STATION_CONNECTED: "/charge_station_connected",
 
-  MAX_LINEAR_SPEED: 0.2,
-  MAX_ANGULAR_SPEED: 2,
+  MAX_LINEAR_SPEED: 0.4,
+  MAX_ANGULAR_SPEED: 3.5,
 };

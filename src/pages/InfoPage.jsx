@@ -78,12 +78,12 @@ const InfoPage = () => {
             sensorsData={sensorsData}
             sensorName="batt1"
             color="##ff7a00"
-            text="Battery 1, %"
+            text="Battery , %"
             units="%"
             minValue={0}
             maxValue={100}
           />
-          <CircularProgress
+          {/* <CircularProgress
             sensorsData={sensorsData}
             sensorName="batt2"
             color="#00e1ff"
@@ -145,7 +145,7 @@ const InfoPage = () => {
             units="℃"
             minValue={0}
             maxValue={40}
-          />
+          /> */}
         </div>
 
         <h3 className="w-full text-center font-[RobotoMono] text-2xl font-bold ">

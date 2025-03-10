@@ -397,7 +397,6 @@ const customnavigator = (ros) => {
   /* Robot position watcher */
   createSubscribeTopic(ros, "/odom", "nav_msgs/msg/Odometry", (data) => {
     const pose = data.pose.pose;
-    console.log(pose)
     // robotMarker.x = pose.position.x;
     // robotMarker.y = -pose.position.y;
     // robotMarker.scaleX = 1.0 / canvas.scaleX;
