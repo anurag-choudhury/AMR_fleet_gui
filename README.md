@@ -1,11 +1,11 @@
 **User interface**
 ----------------------------
 
-**OpenAMR\_UI** is an open-source user interface designed for the intuitive control and management of autonomous mobile robots (AMRs)- its primary focus is on providing a user-friendly experience for effective AMR management. It offers a simple and understandable interface that allows users to monitor telemetry, set up tasks, configure waypoints, and define paths. Built with ease of exploitation, implementation, editing, and redesigning in mind, OpenAMR_UI is optimized for seamless integration with platforms like Linorobot and similar systems and well-suited for use with the Robot Operating System (ROS) Noetic distribution.
+**AMR_fleet_gui** is an open-source ROS2 package designed for the intuitive control and management of autonomous mobile robots (AMRs)- its primary focus is on providing a user-friendly integration experience for effective AMR management. It offers a simple and understandable interface that allows users to monitor telemetry, set up tasks, configure waypoints, and define paths. Built with ease of exploitation, implementation, editing, and redesigning in mind, AMR_fleet_gui is optimized for seamless integration with platforms like Linorobot and similar systems and well-suited for use with the Robot Operating System (ROS2) Humble distribution.
 
 **Key functionalities:**
 
-**Map creation and editing:** OpenAMR\_UI facilitates the creation of detailed digital maps representing the operational environment of the AMR. These maps encompass information on walls, obstacles, and other relevant features. The software allows for:
+**Map creation and editing:** AMR_fleet_gui facilitates the creation of detailed digital maps representing the operational environment of the AMR. These maps encompass information on walls, obstacles, and other relevant features. The software allows for:
 
 *   Constructing new maps from scratch
     
@@ -14,14 +14,14 @@
 *   Changing current maps for managing navigation through different floors etc
     
 
-**Route planning and management:** OpenAMR\_UI empowers users to define specific routes for the AMR to navigate within the created maps. These routes essentially function as pre-programmed instructions, dictating the AMR's movement and obstacle avoidance strategies. The software allows:
+**Route planning and management:** AMR_fleet_gui empowers users to define specific routes for the AMR to navigate within the created maps. These routes essentially function as pre-programmed instructions, dictating the AMR's movement and obstacle avoidance strategies. The software allows:
 
 *   The creation of multiple routes within a single map, catering to various tasks or objectives
     
 *   Setting a specific task at each waypoint to execute it (in development)
     
 
-**Robot control and monitoring:** with maps and routes established, OpenAMR\_UI offers comprehensive control over the AMR's operation. Users can:
+**Robot control and monitoring:** with maps and routes established, AMR_fleet_gui offers comprehensive control over the AMR's operation. Users can:
 
 *   Initiate and terminate robot movement
     
@@ -36,22 +36,22 @@
 
 **Advantages:**
 
-**User-centric design:** OpenAMR\_UI prioritizes usability, even for individuals with limited robotics expertise. The intuitive interface simplifies map creation, route planning, robot control and monitoring statistics.
+**User-centric design:** AMR_fleet_gui prioritizes usability, even for individuals with limited robotics expertise. The intuitive interface simplifies map creation, route planning, robot control and monitoring statistics.
 
-**Open-source accessibility:** As an open-source project, OpenAMR\_UI is freely available for use and modification. This grants users the flexibility to adapt it to their specific requirements and project goals.
+**Open-source accessibility:** As an open-source project, AMR_fleet_gui is freely available for use and modification. This grants users the flexibility to adapt it to their specific requirements and project goals.
 
-**ROS compatibility:** OpenAMR\_UI seamlessly integrates with ROS Noetic, a widely adopted framework for robot development. This compatibility ensures its functionality with a broad spectrum of robots and sensor systems.
+**ROS compatibility:** AMR_fleet_gui seamlessly integrates with ROS2 Humble, a widely adopted framework for robot development. This compatibility ensures its functionality with a broad spectrum of robots and sensor systems.
 
 **Architecture description**
 ----------------------------
 
-OpenAMR\_UI's functionality relies on a robust architecture composed of interconnected ROS nodes, standard packages, and communication libraries. Let's delve deeper into each of these components
+AMR_fleet_gui's functionality relies on a robust architecture composed of interconnected ROS nodes, standard packages, and communication libraries. Let's delve deeper into each of these components
 
 ![Architecture](images/UI_architecture.jpg "Architecture")
 
 **Core nodes:**
 
-**MapNode:** this node serves as the central hub for map and route management within OpenAMR\_UI. It shoulders several key responsibilities:
+**MapNode:** this node serves as the central hub for map and route management within AMR_fleet_gui. It shoulders several key responsibilities:
 
 *   **Map management:** saves and loads map data, ensuring the persistence of the robot's operational environment across sessions.
     
@@ -88,11 +88,11 @@ Our package uses next external packages:
     
     1.  **Localization (AMCL package):** estimating the robot's position within the environment.
         
-    2.  **Path planning (move\_base package):** generating collision-free paths for the robot to follow to the goal.
+    2.  **Path planning (NAV2 package):** generating collision-free paths for the robot to follow to the goal.
         
-    3.  **Movement control (move\_base package):** sending appropriate velocity commands to the robot's wheels or motors to execute the planned path.
+    3.  **Movement control (NAV2 package):** sending appropriate velocity commands to the robot's wheels or motors to execute the planned path.
         
-4.  **gmapping\_package (linorobot includes it):** this ROS package offers a popular SLAM (Simultaneous Localization and Mapping) solution. It allows the robot to build a map of its environment in real-time while simultaneously keeping track of its location within that map. This map information is often crucial for navigation planning.
+4.  **SLAM_TOOLBOX\_package (linorobot includes it):** this ROS package offers a popular SLAM (Simultaneous Localization and Mapping) solution. It allows the robot to build a map of its environment in real-time while simultaneously keeping track of its location within that map. This map information is often crucial for navigation planning.
     
 5.  **map\_server\_package (linorobot includes it):** this ROS package acts as a server that manages the map data used by the navigation stack. It essentially loads a map (created beforehand using tools or provided by gmapping) and makes it accessible to other ROS nodes that require it for navigation purposes.
     
@@ -258,15 +258,15 @@ The Info page likely retrieves sensor data by subscribing to the ROS topic **std
 
 **Essential ROS packages for robot navigation and mapping:**
 
-Your autonomous mobile robot (AMR) project likely relies on a foundation of ROS (Robot Operating System) packages to handle vital tasks like mapping, localization, and navigation. This guide will ensure you have the necessary software components in place before exploring the OpenAMR\_UI package.
+Your autonomous mobile robot (AMR) project likely relies on a foundation of ROS (Robot Operating System) packages to handle vital tasks like mapping, localization, and navigation. This guide will ensure you have the necessary software components in place before exploring the AMR_fleet_gui package.
 
 **Required ROS packages:**
 
-*   move\_base
+*   NAV2
     
 *   AMCL (Adaptive Monte Carlo Localization)
     
-*   gmapping (Grid Mapping)
+*   SLAM_TOOLBOX
     
 *   ekf\_localization (Extended Kalman Filter Localization)
     
@@ -302,7 +302,7 @@ Replace link\_on\_ui\_package\_github with the actual URL of your UI package's G
 
         cd your_workspace/src
         
-        git clone https://github.com/openAMRobot/OpenAMR_UI_package
+        git clone https://github.com/anurag-choudhury/AMR_fleet_gui.git
 
 Build the UI package (assuming it's a ROS package):
 
@@ -310,9 +310,9 @@ Navigate to the root directory of your workspace (where the src folder is locate
 
         cd ..
         
-        catkin_make
+        colcon build
 
-Executing **catkin\_make** start building your ROS packages, including the cloned UI package. This may take some time depending on the complexity of the packages.
+Executing **colcon build** start building your ROS packages, including the cloned UI package. This may take some time depending on the complexity of the packages.
 
 **Configure the UI package:**
 
@@ -338,7 +338,7 @@ Save your changes to config.yaml.
 
 To run UI you need firstly run your base robot SW (navigation, localization etc) and then you must run the next launch:
 
-        roslaunch ui_package start_ui.launch
+        ros2 launch ui_package start_ui.launch
 
 This command runs the user interface at web page in the local network. You can find UI at the next address in any browser:
 
