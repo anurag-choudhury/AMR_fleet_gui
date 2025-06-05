@@ -19,4 +19,8 @@ yarn-error.log*
 
 # build
 /build
+# CMakeLists.txt
+build/
+install/
+log/
 .vscode
