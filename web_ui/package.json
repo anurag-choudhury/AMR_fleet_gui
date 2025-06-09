@@ -25,7 +25,7 @@
   "scripts": {
     "generate-config": "node scripts/generate-config-json.js",
     "dev": "clear && npm run generate-config && react-scripts start",
-    "build": "npm run generate-config && react-scripts build",
+    "build": "npm run generate-config && react-scripts build && node scripts/postbuild-symlink.js",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "lint:js": "eslint --fix --ext .js,.jsx .",

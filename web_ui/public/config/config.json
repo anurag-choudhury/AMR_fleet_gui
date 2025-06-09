@@ -19,6 +19,6 @@
   "NAV2_MAP_TOPIC": "/map",
   "NAV2_MAP_FRAME": "map",
   "NAV2_INITIAL_POSE_TOPIC": "/initialpose",
-  "MAX_LINEAR_SPEED": 1.4,
+  "MAX_LINEAR_SPEED": 0.5,
   "MAX_ANGULAR_SPEED": 3.5
 }
