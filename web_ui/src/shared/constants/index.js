@@ -3,12 +3,11 @@ export const AppConfig = {
   ROSBRIDGE_SERVER_PORT: "9090",
   CAMERA_PORT: "8080",
   RECONNECTION_TIME: 1000,
-
+  ROBOT_BASE_FRAME: "ebot_base_link",
   CMD_VEL_TOPIC: "/cmd_vel",
   ROBOT_POSE_TOPIC: "/odom",
+  ROBOT_POSE_FRAME: "odom",
   ROBOT_VELOCITY_TOPIC: "/odom",
-  // ROBOT_POSE_TOPIC: "/roboteq/odom",
-  // ROBOT_VELOCITY_TOPIC: "/roboteq/odom",
   UI_OPERATION_TOPIC: "/ui_operation",
   UI_MESSAGE_TOPIC: "/ui_message",
   UI_OPERATION: "/ui_operation",
@@ -17,7 +16,9 @@ export const AppConfig = {
   SENSORS_TOPIC: "/sensors",
   BATTERY_TOPIC: "/battery_status",
   CHARGE_STATION_CONNECTED: "/charge_station_connected",
-
-  MAX_LINEAR_SPEED: 0.4,
+  NAV2_MAP_TOPIC: "/map",
+  NAV2_MAP_FRAME: "map",
+  NAV2_INITIAL_POSE_TOPIC: "/initialpose",
+  MAX_LINEAR_SPEED: 0.5,
   MAX_ANGULAR_SPEED: 3.5,
 };

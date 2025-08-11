@@ -1,7 +1,7 @@
 {
   "files": {
-    "main.css": "/static/css/main.b25a674f.css",
-    "main.js": "/static/js/main.af03318a.js",
+    "main.css": "/static/css/main.dabb0982.css",
+    "main.js": "/static/js/main.934545b5.js",
     "static/media/RobotoMono-Light.ttf": "/static/media/RobotoMono-Light.234f40fa88a810bad5e4.ttf",
     "static/media/RobotoMono-SemiBold.ttf": "/static/media/RobotoMono-SemiBold.caa2274ab099019bc599.ttf",
     "static/media/RobotoMono-Bold.ttf": "/static/media/RobotoMono-Bold.7211ab61a8b83177865a.ttf",
@@ -19,11 +19,11 @@
     "static/media/icon-plus.svg": "/static/media/icon-plus.7d4ad605d690898da14f.svg",
     "static/media/icon-map-arrow.svg": "/static/media/icon-map-arrow.ef8352d6f18204f8bba0.svg",
     "static/media/icon-minus.svg": "/static/media/icon-minus.5a526a59a4e149c704c4.svg",
-    "main.b25a674f.css.map": "/static/css/main.b25a674f.css.map",
-    "main.af03318a.js.map": "/static/js/main.af03318a.js.map"
+    "main.dabb0982.css.map": "/static/css/main.dabb0982.css.map",
+    "main.934545b5.js.map": "/static/js/main.934545b5.js.map"
   },
   "entrypoints": [
-    "static/css/main.b25a674f.css",
-    "static/js/main.af03318a.js"
+    "static/css/main.dabb0982.css",
+    "static/js/main.934545b5.js"
   ]
 }
