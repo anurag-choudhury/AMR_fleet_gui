@@ -10,6 +10,22 @@ window.NAV2D.finishedPointItem = null;
 window.NAV2D.orientatedPointItem = null;
 
 window.NAV2D.mapInited = false;
+window.NAV2D.tf = window.NAV2D.tf || {
+  // store latest transforms by "parent->child"
+  latest: {},
+};
+
+window.NAV2D.laser = window.NAV2D.laser || {
+  shape: null,          // createjs.Shape for scan points
+  lastPoints: [],       // last scan points in MAP frame
+  topic: "scan",
+  enabled: true,
+  dotRadius: 0.03,      // meters (map units)
+  maxPoints: 2500,      // safety cap
+  frame: 'laser',          // laser frame id from message
+  scanTopic: "/scan",   // change if needed
+};
+
 window.NAV2D.scale = { x: 0, y: 0 };
 
 
@@ -26,6 +42,8 @@ window.NAV2D.checkScale = () => {
       window.NAV2D.pointsFromTopic,
       window.NAV2D.canvas.scene,
     );
+    drawLaserPoints(window.NAV2D.canvas.scene);
+
   }
 };
 
@@ -74,6 +92,9 @@ window.NAV2D.InitMap = (ros) => {
 
     customnavigator(ros);
     init_pose_fn(ros)
+    // initLaserScanOverlay_ScanOnly(ros);
+    initLaserScanOverlay(ros);
+
   }
 };
 /* Cleaning map */
@@ -95,6 +116,451 @@ const drawPoints = (points, canvas) => {
   });
   return window.NAV2D.pointsArray;
 };
+const quatToYaw = (q) => {
+  // q: {x,y,z,w}
+  const siny_cosp = 2 * (q.w * q.z + q.x * q.y);
+  const cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z);
+  return Math.atan2(siny_cosp, cosy_cosp);
+};
+
+const tfKey = (parent, child) => `${parent}->${child}`;
+
+const storeTF = (parent, child, transform) => {
+  // transform: geometry_msgs/Transform
+  window.NAV2D.tf.latest[tfKey(parent, child)] = {
+    x: transform.translation.x,
+    y: transform.translation.y,
+    yaw: quatToYaw(transform.rotation),
+    stamp: Date.now(),
+  };
+};
+
+const getTF = (parent, child) => window.NAV2D.tf.latest[tfKey(parent, child)] || null;
+
+// Compose T = A ∘ B (apply B then A)
+const compose2D = (A, B) => {
+  // A,B: {x,y,yaw}
+  const c = Math.cos(A.yaw), s = Math.sin(A.yaw);
+  const x = A.x + (B.x * c - B.y * s);
+  const y = A.y + (B.x * s + B.y * c);
+  let yaw = A.yaw + B.yaw;
+  yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw));
+  return { x, y, yaw };
+};
+
+const transformPoint2D = (T, px, py) => {
+  const c = Math.cos(T.yaw), s = Math.sin(T.yaw);
+  return {
+    x: T.x + (px * c - py * s),
+    y: T.y + (px * s + py * c),
+  };
+};
+
+const ensureLaserShape = (canvas) => {
+  if (window.NAV2D.laser.shape) return;
+
+  // One shape for all points (fast)
+  const shape = new window.createjs.Shape();
+  shape.name = "laser_scan_overlay";
+  canvas.addChild(shape);
+  window.NAV2D.laser.shape = shape;
+};
+
+const drawLaserPoints = (canvas) => {
+  const shape = window.NAV2D?.laser?.shape;
+  if (!shape) return;
+
+  const pts = window.NAV2D.laser.lastPoints || [];
+  const g = shape.graphics;
+  g.clear();
+
+  if (!pts.length) return;
+
+  // ✅ robust color (avoids black rgba bug)
+  g.beginFill(window.createjs.Graphics.getRGB(255, 0, 0, 0.9));
+
+  // ✅ dynamic radius: keep visible at any zoom
+  // base radius in meters, but scale up when zoomed out
+  const zoom = canvas.scaleX || 1.0;
+  const r = Math.max(0.04, window.NAV2D.laser.dotRadius / zoom); // good visibility
+
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    g.drawCircle(p.x, -p.y, r);
+  }
+
+  g.endFill();
+};
+
+const initLaserScanOverlay = (ros) => {
+  console.log("✅ [LaserOverlay] init called");
+
+  if (!ros || !window.NAV2D?.canvas?.scene) {
+    console.log("❌ [LaserOverlay] ros/canvas missing");
+    return;
+  }
+
+  const canvas = window.NAV2D.canvas.scene;
+
+  // =========================
+  // CONFIG
+  // =========================
+  const mapFrame = (window.AppConfig?.NAV2_MAP_FRAME || "map").replace(/^\/+/, "");
+  const odomFrame = (window.AppConfig?.ROBOT_POSE_FRAME || "odom").replace(/^\/+/, "");
+  const baseLink = (window.AppConfig?.ROBOT_BASE_FRAME || "ebot_base_link").replace(/^\/+/, "");
+  const baseMid = (window.NAV2D?.laser?.intermediateBase || "ebot_base").replace(/^\/+/, "");
+  const scanTopic = (window.AppConfig?.LASER_SCAN_TOPIC || "/scan");
+
+  // max points to draw each scan
+  const MAX_POINTS = 450; // keep this moderate for UI
+  const DRAW_EVERY_N = 3; // draw every Nth scan callback
+
+  // =========================
+  // STATE
+  // =========================
+  window.NAV2D.laser = window.NAV2D.laser || {};
+  window.NAV2D.laser.enabled = true;
+  window.NAV2D.laser._drawCount = 0;
+
+  // Keep markers we draw so we can delete next frame
+  window.NAV2D.laser.markers = window.NAV2D.laser.markers || [];
+
+  // TF store
+  const TF = new Map();
+  const norm = (s) => (s || "").replace(/^\/+/, "");
+  const key = (p, c) => `${norm(p)}->${norm(c)}`;
+  const storeRawTF = (parent, child, tf) => {
+    if (!parent || !child || !tf) return;
+    TF.set(key(parent, child), tf);
+  };
+  const getRawTF = (parent, child) => TF.get(key(parent, child)) || null;
+
+  // =========================
+  // MATH (2D)
+  // =========================
+  const quatToYaw = (q) => {
+    if (!q) return 0.0;
+    const siny_cosp = 2.0 * (q.w * q.z + q.x * q.y);
+    const cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
+    return Math.atan2(siny_cosp, cosy_cosp);
+  };
+
+  const rawTo2D = (tf) => {
+    if (!tf?.translation || !tf?.rotation) return null;
+    return {
+      x: tf.translation.x ?? 0,
+      y: tf.translation.y ?? 0,
+      theta: quatToYaw(tf.rotation),
+    };
+  };
+
+  const invert2D = (T) => {
+    const c = Math.cos(T.theta), s = Math.sin(T.theta);
+    const ix = -(c * T.x + s * T.y);
+    const iy = -(-s * T.x + c * T.y);
+    return { x: ix, y: iy, theta: -T.theta };
+  };
+
+  const compose2D = (A, B) => {
+    const c = Math.cos(A.theta), s = Math.sin(A.theta);
+    return {
+      x: A.x + (B.x * c - B.y * s),
+      y: A.y + (B.x * s + B.y * c),
+      theta: A.theta + B.theta,
+    };
+  };
+
+  const transformPoint2D = (T, x, y) => {
+    const c = Math.cos(T.theta), s = Math.sin(T.theta);
+    return { x: T.x + x * c - y * s, y: T.y + x * s + y * c };
+  };
+
+  const get2D = (parent, child) => {
+    const fwd = getRawTF(parent, child);
+    if (fwd) return rawTo2D(fwd);
+
+    const rev = getRawTF(child, parent);
+    if (rev) {
+      const T = rawTo2D(rev);
+      return T ? invert2D(T) : null;
+    }
+    return null;
+  };
+
+  const getChain2D = (frames) => {
+    let T = { x: 0, y: 0, theta: 0 };
+    for (let i = 0; i < frames.length - 1; i++) {
+      const Tab = get2D(frames[i], frames[i + 1]);
+      if (!Tab) return null;
+      T = compose2D(T, Tab);
+    }
+    return T;
+  };
+
+  // =========================
+  // TF SUBS (/tf + /tf_static)
+  // =========================
+  const subTF = (topicName) => {
+    const t = new window.ROSLIB.Topic({
+      ros,
+      name: topicName,
+      messageType: "tf2_msgs/TFMessage",
+    });
+
+    let cnt = 0;
+    t.subscribe((msg) => {
+      cnt++;
+      if (cnt === 1 || cnt % 2000 === 0) {
+        console.log(`✅ [LaserOverlay] ${topicName} heartbeat`, { cnt, transforms: msg.transforms?.length });
+      }
+      (msg.transforms || []).forEach((tr) => {
+        storeRawTF(tr.header.frame_id, tr.child_frame_id, tr.transform);
+      });
+    });
+
+    return t;
+  };
+
+  // avoid double subscribing when page reruns init
+  if (!window.NAV2D.laser._tfSubscribed) {
+    window.NAV2D.laser._tfSubscribed = true;
+    subTF("/tf");
+    subTF("/tf_static");
+  }
+
+  // =========================
+  // DRAW HELPERS (ROS2D markers)
+  // =========================
+  const clearLaserMarkers = () => {
+    window.NAV2D.laser.markers.forEach((m) => {
+      try { canvas.removeChild(m); } catch (e) { }
+    });
+    window.NAV2D.laser.markers = [];
+  };
+
+  const makeDot = (x, y) => {
+    // use a tiny arrow as a dot marker (reliable in ROS2D layers)
+    const dot = new window.ROS2D.NavigationArrow({
+      size: 6,
+      strokeSize: 0,
+      fillColor: window.createjs.Graphics.getRGB(255, 0, 0, 0.8),
+      pulse: false,
+    });
+
+    dot.x = x;
+    dot.y = -y;
+    dot.rotation = 0;
+    dot.scaleX = 1.0 / canvas.scaleX;
+    dot.scaleY = 1.0 / canvas.scaleY;
+    dot.visible = true;
+    return dot;
+  };
+
+  // =========================
+  // LASER SUB
+  // =========================
+  const scan = new window.ROSLIB.Topic({
+    ros,
+    name: scanTopic,
+    messageType: "sensor_msgs/msg/LaserScan",
+    throttle_rate: 80,
+  });
+
+  let rx = 0;
+
+  scan.subscribe((msg) => {
+    rx++;
+
+    if (rx === 1 || rx % 50 === 0) {
+      console.log("✅ [LaserOverlay] scan heartbeat", {
+        rx,
+        frame_id: msg?.header?.frame_id,
+        ranges_len: msg?.ranges?.length,
+      });
+    }
+
+    if (!window.NAV2D.laser.enabled) return;
+
+    // draw every Nth scan to reduce lag
+    if (rx % DRAW_EVERY_N !== 0) return;
+
+    const laserFrame = norm(msg?.header?.frame_id);
+    if (!laserFrame) return;
+
+    // chain: map->odom->base_link->base->laser
+    const chain1 = [mapFrame, odomFrame, baseLink, baseMid, laserFrame];
+    const chain2 = [mapFrame, odomFrame, baseLink, laserFrame]; // fallback
+
+    let T_map_laser = getChain2D(chain1) || getChain2D(chain2);
+    if (!T_map_laser) return;
+
+    const ranges = msg.ranges || [];
+    const angleMin = msg.angle_min ?? 0;
+    const angleInc = msg.angle_increment ?? 0;
+    const rMin = msg.range_min ?? 0.05;
+    const rMax = msg.range_max ?? 30.0;
+
+    // Build map points
+    const pts = [];
+    const step = Math.max(1, Math.floor(ranges.length / MAX_POINTS));
+
+    for (let i = 0; i < ranges.length && pts.length < MAX_POINTS; i += step) {
+      const r = ranges[i];
+      if (!Number.isFinite(r)) continue;
+      if (r < rMin || r > rMax) continue;
+
+      const a = angleMin + i * angleInc;
+      const lx = r * Math.cos(a);
+      const ly = r * Math.sin(a);
+
+      const mp = transformPoint2D(T_map_laser, lx, ly);
+      pts.push(mp);
+    }
+
+    if (rx % 50 === 0) console.log("✅ [LaserOverlay] pts", pts.length);
+
+    // DRAW
+    clearLaserMarkers();
+
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      const dot = makeDot(p.x, p.y);
+      window.NAV2D.laser.markers.push(dot);
+      canvas.addChild(dot);
+    }
+  });
+
+  window.NAV2D.laser.scan = scan;
+
+  console.log("✅ [LaserOverlay] init complete", {
+    mapFrame, odomFrame, baseLink, baseMid, scanTopic
+  });
+};
+
+
+
+
+const initLaserScanOverlay_ScanOnly = (ros) => {
+  console.log("✅ [ScanOnly] initLaserScanOverlay_ScanOnly called");
+
+  if (!ros || !window.NAV2D?.canvas?.scene) {
+    console.log("❌ [ScanOnly] ros/canvas missing", {
+      ros: !!ros,
+      canvas: !!window.NAV2D?.canvas,
+      scene: !!window.NAV2D?.canvas?.scene,
+    });
+    return;
+  }
+
+  const canvas = window.NAV2D.canvas.scene;
+
+  // Create shape once
+  window.NAV2D.scanOnly = window.NAV2D.scanOnly || {};
+  if (!window.NAV2D.scanOnly.shape) {
+    window.NAV2D.scanOnly.shape = new window.createjs.Shape();
+    canvas.addChild(window.NAV2D.scanOnly.shape);
+    console.log("✅ [ScanOnly] shape created and added to canvas");
+  } else {
+    console.log("✅ [ScanOnly] shape already exists");
+  }
+
+  const topicName = window.AppConfig?.LASER_SCAN_TOPIC || "/scan";
+  console.log("✅ [ScanOnly] subscribing LaserScan", {
+    topic: topicName,
+    type: "sensor_msgs/msg/LaserScan",
+  });
+
+  const scanTopic = new window.ROSLIB.Topic({
+    ros,
+    name: topicName,
+    messageType: "sensor_msgs/msg/LaserScan",
+    throttle_rate: 100, // ms
+  });
+
+  let rx = 0;
+
+  scanTopic.subscribe((scan) => {
+    rx++;
+
+    const ranges = scan?.ranges || [];
+    const angleMin = scan?.angle_min ?? 0;
+    const angleInc = scan?.angle_increment ?? 0;
+    const rMin = scan?.range_min ?? 0;
+    const rMax = scan?.range_max ?? Infinity;
+
+    // Count validity
+    let finiteCount = 0;
+    let inRangeCount = 0;
+    let minR = Infinity;
+    let maxR = -Infinity;
+    let zeroCount = 0;
+
+    for (let i = 0; i < ranges.length; i++) {
+      const r = ranges[i];
+      if (r === 0) zeroCount++;
+      if (Number.isFinite(r)) {
+        finiteCount++;
+        if (r < minR) minR = r;
+        if (r > maxR) maxR = r;
+        if (r >= rMin && r <= rMax) inRangeCount++;
+      }
+    }
+
+    if (rx === 1 || rx % 20 === 0) {
+      console.log("✅ [ScanOnly] stats", {
+        rx,
+        frame_id: scan?.header?.frame_id,
+        ranges_len: ranges.length,
+        finiteCount,
+        inRangeCount,
+        zeroCount,
+        minR: Number.isFinite(minR) ? minR : null,
+        maxR: Number.isFinite(maxR) ? maxR : null,
+        range_min: rMin,
+        range_max: rMax,
+      });
+    }
+
+    // Draw
+    const g = window.NAV2D.scanOnly.shape.graphics;
+    g.clear();
+    g.beginFill(window.createjs.Graphics.getRGB(255, 0, 0, 0.9));
+
+    let drawn = 0;
+
+    // DEBUG DRAW RULE:
+    // - only skip NaN/Inf and r<=0
+    // - do NOT filter using range_min/range_max (so you can see *something*)
+    for (let i = 0; i < ranges.length; i++) {
+      const r = ranges[i];
+      if (!Number.isFinite(r)) continue;
+      if (r <= 0) continue;
+
+      const a = angleMin + i * angleInc;
+      const x = r * Math.cos(a);
+      const y = r * Math.sin(a);
+
+      // Bigger dot so it is visible
+      g.drawCircle(x, -y, 0.08);
+      drawn++;
+      if (drawn > 2500) break;
+    }
+
+    g.endFill();
+
+    // keep same size while zooming
+    window.NAV2D.scanOnly.shape.scaleX = 1.0 / canvas.scaleX;
+    window.NAV2D.scanOnly.shape.scaleY = 1.0 / canvas.scaleY;
+
+    if (rx === 1 || rx % 20 === 0) {
+      console.log("✅ [ScanOnly] drawn", { drawn });
+    }
+  });
+
+  console.log("✅ [ScanOnly] subscription active");
+};
+
+
 
 const customnavigator = (ros) => {
   if (!ros || !window.NAV2D.canvas) {

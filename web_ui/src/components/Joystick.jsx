@@ -85,7 +85,7 @@ const JoystickComponent = () => {
           size={size}
           stickSize={stickSize}
           baseColor="#F5F5F5"
-          stickColor="#22b7fc"
+          stickColor="#000"
           move={(evt) => handleJoysticMove(evt)}
           stop={handleStop}
         />

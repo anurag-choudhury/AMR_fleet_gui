@@ -5,6 +5,7 @@ const initialState = {
 };
 
 export const robotStore = createSlice({
+
   name: "robotStore",
   initialState,
   reducers: {

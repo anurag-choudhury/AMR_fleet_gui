@@ -7,8 +7,9 @@ import { testStructure } from "../shared/constants/testjson";
 
 import { RosContext } from "../app/App";
 
+
 import Map from "../components/Map";
-import Camera from "../components/Camera";
+// import Camera from "../components/Camera";
 import Logs from "../components/Logs";
 import Joystick from "../components/Joystick";
 import FilesModal from "../components/modal/FilesModal";
@@ -141,7 +142,6 @@ const MapPage = () => {
   }, []);
 
   /* BUTTON HANDLERS */
-
   const onNewMapClick = () => {
     uiOperationTopic.current.publish(
       new window.ROSLIB.Message({ data: "build_map" }),
@@ -281,10 +281,11 @@ const MapPage = () => {
       if (currentOperation) {
         currentOperation.preActions && currentOperation.preActions();
         if (isBreaked) return;
-        const objectWithoutSpaces = processObjectStrings(currentOperation.data);
 
+        const objectWithoutSpaces = processObjectStrings(currentOperation.data);
         const stringifiedObjToSend = JSON.stringify(objectWithoutSpaces);
         const messageToSend = `${currentOperation.path}/${stringifiedObjToSend}`;
+
         uiOperationTopic.current.publish(
           new window.ROSLIB.Message({ data: messageToSend }),
         );
@@ -300,6 +301,7 @@ const MapPage = () => {
     filesModalHeader.current = null;
     filesModalPlaceholder.current = null;
   };
+
   // In your map.jsx or a shared initialization file
   window.isInitialPoseMode = false;
   const init_pose = () => {
@@ -321,98 +323,134 @@ const MapPage = () => {
           modalHandler={onFormSubmitHandler}
         />
       )}
-      <div className="sectionHeight flex flex-col gap-7 pt-[30px]">
-        <h2 className="w-full text-center font-[RobotoMono] text-3xl font-bold text-themeBlue">
-          Group:{" "}
-          <span className="text-themeDarkBlue">{selectedFile.group} </span>
+
+      <div className="sectionHeight flex flex-col gap-5 px-4 pt-6 sm:px-6 lg:px-8 lg:gap-7 lg:pt-[30px]">
+        <h2 className="w-full text-center font-[RobotoMono] text-xl font-bold text-themeBlue sm:text-2xl lg:text-3xl">
+          Group: <span className="text-themeDarkBlue">{selectedFile.group} </span>
           Map: <span className="text-themeDarkBlue">{selectedFile.map}</span>
         </h2>
-        <section className="color-white flex w-full gap-[8%]">
-          <div className="h-[300px] w-1/2 xl:h-[486px] ">
+
+        {/* MAP SECTION */}
+        <section className="flex w-full flex-col gap-4 lg:flex-row lg:gap-[8%]">
+          <div className="h-[260px] w-full sm:h-[320px] lg:h-[486px] lg:w-1/2">
             <Map />
           </div>
-          <div className="h-[300px] w-1/2 xl:h-[486px]">
+
+          {/* If you enable Camera later */}
+          {/* <div className="h-[260px] w-full sm:h-[320px] lg:h-[486px] lg:w-1/2">
             <Camera />
-          </div>
+          </div> */}
         </section>
 
-        <section className="mt-6 flex w-full justify-between gap-10 xl:mt-0">
-          <div className="flex h-full w-1/2 min-w-[400px] max-w-[700px] items-center justify-between gap-4">
-            <div className="mr-auto flex w-full flex-col gap-2">
-              <div className="flex w-full flex-col items-center justify-center gap-2 md:flex-row">
-                <Button
-                  size="small"
-                  onBtnClick={onChangeMapClick}
-                  type={inEditMode ? "disabled" : ""}
-                >
-                  <span className="iconMap" />
-                  <span className="mx-auto">Change</span>
-                </Button>
+        {/* CONTROLS / JOYSTICK / LOGS */}
+        <section className="mt-2 flex w-full flex-col gap-6 xl:mt-0 xl:flex-row xl:items-start xl:justify-between xl:gap-10">
+          {/* LEFT: BUTTONS */}
+          <div className="w-full xl:w-1/2">
+            <div className="flex w-full flex-col gap-3">
+              {/* Row 1 */}
+              <div className="flex w-full flex-wrap items-center justify-center gap-2 md:justify-start">
+                <div className="w-full sm:w-auto">
+                  <Button
+                    size="small"
+                    onBtnClick={onChangeMapClick}
+                    type={inEditMode ? "disabled" : ""}
+                  >
+                    <span className="iconMap" />
+                    <span className="mx-auto">Change</span>
+                  </Button>
+                </div>
 
-                <Button
-                  size="small"
-                  onBtnClick={onSaveMapClick}
-                  type={inEditMode ? "" : "disabled"}
-                  disabled={true}
-                >
-                  <span className="iconMap" />
-                  <span className="mx-auto">Save</span>
-                </Button>
+                <div className="w-full sm:w-auto">
+                  <Button
+                    size="small"
+                    onBtnClick={onSaveMapClick}
+                    type={inEditMode ? "" : "disabled"}
+                    disabled={true}
+                  >
+                    <span className="iconMap" />
+                    <span className="mx-auto">Save</span>
+                  </Button>
+                </div>
               </div>
 
-              <div className="flex w-full flex-col items-center justify-center gap-2 md:flex-row">
-                <Button
-                  size="small"
-                  onBtnClick={onNewMapClick}
-                  type={inEditMode ? "disabled" : ""}
-                  disabled={false}
-                >
-                  <span className="iconMap" />
-                  <span className="mx-auto"> Create </span>
-                </Button>
+              {/* Row 2 */}
+              <div className="flex w-full flex-wrap items-center justify-center gap-2 md:justify-start">
+                <div className="w-full sm:w-auto">
+                  <Button
+                    size="small"
+                    onBtnClick={onNewMapClick}
+                    type={inEditMode ? "disabled" : ""}
+                    disabled={false}
+                  >
+                    <span className="iconMap" />
+                    <span className="mx-auto">Create</span>
+                  </Button>
+                </div>
 
-                <Button
-                  size="small"
-                  onBtnClick={onRenameMapClick}
-                  type={inEditMode ? "disabled" : ""}
-                >
-                  <span className="iconMap" />
-                  <span className="mx-auto">Rename</span>
-                </Button>
+                <div className="w-full sm:w-auto">
+                  <Button
+                    size="small"
+                    onBtnClick={onRenameMapClick}
+                    type={inEditMode ? "disabled" : ""}
+                  >
+                    <span className="iconMap" />
+                    <span className="mx-auto">Rename</span>
+                  </Button>
+                </div>
 
-                <Button
-                  size="small"
-                  onBtnClick={onDeleteMapClick}
-                  type={inEditMode ? "disabled" : ""}
-                >
-                  <span className="iconMap" />
-                  <span className="mx-auto">Delete</span>
-                </Button>
+                <div className="w-full sm:w-auto">
+                  <Button
+                    size="small"
+                    onBtnClick={onDeleteMapClick}
+                    type={inEditMode ? "disabled" : ""}
+                  >
+                    <span className="iconMap" />
+                    <span className="mx-auto">Delete</span>
+                  </Button>
+                </div>
               </div>
 
-              <div className="flex w-full flex-col items-center justify-center gap-2 md:flex-row">
-                <Button size="small" onBtnClick={onCreateGroupClick}>
-                  <span className="iconGroup" />
-                  <span className="mx-auto">Create</span>
-                </Button>
+              {/* Row 3 */}
+              <div className="flex w-full flex-wrap items-center justify-center gap-2 md:justify-start">
+                <div className="w-full sm:w-auto">
+                  <Button size="small" onBtnClick={onCreateGroupClick}>
+                    <span className="iconGroup" />
+                    <span className="mx-auto">Create</span>
+                  </Button>
+                </div>
 
-                <Button
-                  size="small"
-                  onBtnClick={onDeleteGroupClick}
-                  type={inEditMode ? "disabled" : ""}
+                <div className="w-full sm:w-auto">
+                  <Button
+                    size="small"
+                    onBtnClick={onDeleteGroupClick}
+                    type={inEditMode ? "disabled" : ""}
+                  >
+                    <span className="iconGroup" />
+                    <span className="mx-auto">Delete</span>
+                  </Button>
+                </div>
+
+                <button
+                  onClick={init_pose}
+                  className="w-full rounded-2xl bg-black p-2 text-white sm:w-auto"
+                  id="initializePoseButton"
                 >
-                  <span className="iconGroup" />
-                  <span className="mx-auto">Delete</span>
-                </Button>
-                <button onClick={init_pose} className="bg-black text-white p-2 rounded-2xl" id="initializePoseButton">Initialize Pose</button>
+                  Initialize Pose
+                </button>
               </div>
             </div>
           </div>
 
-          <Joystick />
+          {/* MIDDLE: JOYSTICK */}
+          <div className="w-full xl:w-auto">
+            <Joystick />
+          </div>
 
-          <div className="max-h-[180px] w-1/3 max-w-[700px] flex-grow">
-            <Logs />
+          {/* RIGHT: LOGS */}
+          <div className="w-full xl:w-1/3 xl:max-w-[700px]">
+            <div className="max-h-[220px] overflow-auto sm:max-h-[260px] xl:max-h-[180px]">
+              <Logs />
+            </div>
           </div>
         </section>
       </div>

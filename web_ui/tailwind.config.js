@@ -9,7 +9,7 @@ module.exports = {
         themeMediumGray: "#C3C3C3",
         themeTextGray: "#696969",
 
-        themeBlue: "#22b7fc",
+        themeBlue: "#000",
         themeMediumBlue: "#1c97d4",
         themeDarkBlue: "#197fb4",
 

@@ -42,7 +42,7 @@ def generate_launch_description():
     way_points_navigation_launch = launch_ros.actions.Node(
             package='ui_package',
             executable='way_points_handler.py',
-            name='ui_folder_handler',
+            name='ui_way_points_handler',
             output='screen'
         )
 
@@ -51,7 +51,7 @@ def generate_launch_description():
         folder_handler_node,
         rosbridge_server,
         way_points_navigation_launch,
-        flask_launch
+        # flask_launch
     #      ExecuteProcess(
     #      cmd=['python3', flask_script],
     #      output='screen'
