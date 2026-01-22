@@ -39,9 +39,9 @@ const ControlPage = () => {
           <div className="flex flex-1 flex-col gap-4 2xl:gap-24">
             {/* Keep PC structure: still a centered column; on mobile make it full width */}
             <div className="grid w-full grid-cols-1 gap-4 self-center sm:w-3/4 md:w-2/3 xl:w-1/2 xl:gap-10">
-              <Button onBtnClick={() => onControlBtnClick("follow_route")}>
+              {/* <Button onBtnClick={() => onControlBtnClick("follow_route")}>
                 <span className="mx-auto">Follow</span>
-              </Button>
+              </Button> */}
               <Button onBtnClick={() => onControlBtnClick("next_point")}>
                 <span className="mx-auto">Next point</span>
               </Button>
@@ -51,6 +51,14 @@ const ControlPage = () => {
               <Button size="big" onBtnClick={() => onControlBtnClick("home")}>
                 <span className="mx-auto">Home</span>
               </Button>
+              <Button onBtnClick={() => onControlBtnClick("rod_extend")}>
+                <span className="mx-auto">Extend Rod</span>
+              </Button>
+
+              <Button onBtnClick={() => onControlBtnClick("rod_retract")}>
+                <span className="mx-auto">Retract Rod</span>
+              </Button>
+
             </div>
           </div>
 

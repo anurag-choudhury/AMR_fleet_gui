@@ -3,7 +3,8 @@ export const AppConfig = {
   ROSBRIDGE_SERVER_PORT: "9090",
   CAMERA_PORT: "8080",
   RECONNECTION_TIME: 1000,
-  ROBOT_BASE_FRAME: "ebot_base_link",
+  ROBOT_BASE_FRAME: "base_link",
+  // ROBOT_BASE_FRAME: "ebot_base_link",
   CMD_VEL_TOPIC: "/cmd_vel",
   ROBOT_POSE_TOPIC: "/odom",
   ROBOT_POSE_FRAME: "odom",
@@ -21,4 +22,6 @@ export const AppConfig = {
   NAV2_INITIAL_POSE_TOPIC: "/initialpose",
   MAX_LINEAR_SPEED: 0.5,
   MAX_ANGULAR_SPEED: 3.5,
+  LASER_SCAN_TOPIC: '/filtered_scan',
+  // LASER_SCAN_TOPIC: '/scan'
 };
