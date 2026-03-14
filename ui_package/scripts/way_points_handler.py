@@ -5,6 +5,7 @@ import json
 import time
 import math
 import yaml
+import threading
 
 import rclpy
 from rclpy.node import Node
@@ -16,7 +17,8 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped, PoseArray
 
 from nav2_msgs.action import FollowWaypoints, NavigateToPose
-
+from std_srvs.srv import Trigger
+import requests
 
 class WayPointMover(Node):
     """
@@ -42,6 +44,11 @@ class WayPointMover(Node):
         self.needCheckCharger = bool(self.get_parameter("needCheckCharger").value)
         self.charge_station_connected_topic = self.get_parameter("charge_station_connected_topic").value
 
+        # Rod services
+        self.rod_extend_cli = self.create_client(Trigger, "/rod/extend")
+        self.rod_retract_cli = self.create_client(Trigger, "/rod/retract")
+        self.rod_stop_cli = self.create_client(Trigger, "/rod/stop")
+
         # Ensure folders exist
         self.param_dir = os.path.join(self.data_dir, "param")
         self.paths_dir = os.path.join(self.data_dir, "paths")
@@ -64,6 +71,16 @@ class WayPointMover(Node):
         self.charge_connected = False
         self.current_goal_handle = None
 
+        # Rod state topic parsing
+        self.rod_seq_active = None  # int 0/1
+        self.rod_mode = "None"
+        self.rod_state_raw = ""
+        self._rod_lock = threading.Lock()
+
+        # Home mission thread control
+        self._home_thread = None
+        self._home_running = False
+
         # -------------------------
         # ROS I/O
         # -------------------------
@@ -72,6 +89,8 @@ class WayPointMover(Node):
 
         if self.needCheckCharger:
             self.create_subscription(Bool, self.charge_station_connected_topic, self.charge_station_callback, 10)
+
+        self.create_subscription(String, "/rod/state", self.on_rod_state, 10)
 
         self.ui_message_pub = self.create_publisher(String, "/ui_message", self.qos_transient)
         self.pose_array_pub = self.create_publisher(PoseArray, "/WPs_topic", 10)
@@ -100,6 +119,27 @@ class WayPointMover(Node):
     # -------------------------
     # Helpers
     # -------------------------
+    def _call_trigger(self, client, label):
+        """Non-blocking fire-and-forget trigger, for UI button actions."""
+        if not client.wait_for_service(timeout_sec=0.2):
+            self.get_logger().warn(f"{label}: service not available")
+            return
+
+        req = Trigger.Request()
+        fut = client.call_async(req)
+
+        def _done(_fut):
+            try:
+                res = _fut.result()
+                if res.success:
+                    self.get_logger().info(f"{label}: OK - {res.message}")
+                else:
+                    self.get_logger().warn(f"{label}: FAIL - {res.message}")
+            except Exception as e:
+                self.get_logger().error(f"{label}: ERROR - {e}")
+
+        fut.add_done_callback(_done)
+
     def _log_storage(self):
         self.get_logger().info(f"Storage root: {self.data_dir}")
         self.get_logger().info(f"Routes root: {self.paths_dir}")
@@ -115,10 +155,6 @@ class WayPointMover(Node):
             "ts": time.time(),
         }
         self.ui_message_pub.publish(String(data=json.dumps(payload)))
-
-    def _ui_text(self, message: str):
-        """Optional plain text message."""
-        self.ui_message_pub.publish(String(data=message))
 
     def _safe_load_yaml(self, path: str) -> dict:
         if not os.path.isfile(path):
@@ -153,7 +189,6 @@ class WayPointMover(Node):
           - cfg["group"], cfg["map"], cfg["route"] (route without/with .csv)
         """
         route_file = (cfg.get("route_file") or "").strip()
-        # self.get_logger().info(f"Failed path: {cfg}")
         group = (cfg.get("group") or "").strip()
         map_name = (cfg.get("map") or "").strip()
         route = (cfg.get("route") or "").strip()
@@ -193,11 +228,169 @@ class WayPointMover(Node):
             arr.poses.append(item["pose"].pose)
         self.pose_array_pub.publish(arr)
 
+    # =========================================================
+    # Rod state parsing (SEQ busy/idle)
+    # =========================================================
+    def on_rod_state(self, msg: String):
+        # Example: "HOMING:0|HOMED:1|LEP:0|REP:-1|SEQ:0|MODE:None"
+        with self._rod_lock:
+            self.rod_state_raw = msg.data
+            try:
+                parts = {}
+                for kv in msg.data.split("|"):
+                    if ":" in kv:
+                        k, v = kv.split(":", 1)
+                        parts[k] = v
+                self.rod_seq_active = int(parts.get("SEQ", "0"))
+                self.rod_mode = parts.get("MODE", "None")
+            except Exception:
+                pass
+
+    def _wait_future(self, fut, timeout_s: float) -> bool:
+        """Wait for an async future to complete without spinning (callbacks happen in main executor)."""
+        ev = threading.Event()
+
+        def _done(_):
+            ev.set()
+
+        fut.add_done_callback(_done)
+        return ev.wait(timeout=timeout_s)
+
+    def wait_for_rod_state_msg(self, timeout_s: float = 2.0) -> bool:
+        t0 = time.time()
+        while rclpy.ok() and (time.time() - t0) < timeout_s and not self.break_mission:
+            with self._rod_lock:
+                if self.rod_seq_active is not None:
+                    return True
+            time.sleep(0.05)
+        return False
+
+    def wait_rod_busy(self, timeout_s: float = 5.0) -> bool:
+        """Wait until SEQ becomes 1 (sequence actually started)."""
+        if not self.wait_for_rod_state_msg(2.0):
+            self.get_logger().warn("⚠️ No /rod/state received yet")
+
+        t0 = time.time()
+        while rclpy.ok() and (time.time() - t0) < timeout_s and not self.break_mission:
+            with self._rod_lock:
+                if self.rod_seq_active == 1:
+                    return True
+            time.sleep(0.05)
+        return False
+
+    def wait_rod_idle(self, timeout_s: float = 180.0) -> bool:
+        """Wait until SEQ becomes 0 (sequence finished)."""
+        if not self.wait_for_rod_state_msg(2.0):
+            self.get_logger().warn("⚠️ No /rod/state received yet")
+
+        t0 = time.time()
+        while rclpy.ok() and (time.time() - t0) < timeout_s and not self.break_mission:
+            with self._rod_lock:
+                if self.rod_seq_active == 0:
+                    return True
+            time.sleep(0.05)
+
+        with self._rod_lock:
+            last = self.rod_state_raw
+        self.get_logger().error(f"❌ wait_rod_idle timeout. Last /rod/state: {last}")
+        return False
+
+    def call_trigger_blocking(self, client, name: str, timeout_s: float = 5.0) -> bool:
+        if not client.wait_for_service(timeout_sec=2.0):
+            self.get_logger().error(f"❌ {name}: service unavailable")
+            return False
+
+        req = Trigger.Request()
+        fut = client.call_async(req)
+
+        if not self._wait_future(fut, timeout_s=timeout_s):
+            self.get_logger().error(f"❌ {name}: service call timeout")
+            return False
+
+        resp = fut.result()
+        if not resp:
+            self.get_logger().error(f"❌ {name}: no response")
+            return False
+        if not resp.success:
+            self.get_logger().error(f"❌ {name} failed: {resp.message}")
+            return False
+
+        self.get_logger().info(f"✅ {name} OK: {resp.message}")
+        return True
+
+    def start_and_wait_rod(self, action_name: str, client, timeout_s: float = 180.0) -> bool:
+        """
+        1) Ensure idle before starting
+        2) Call service
+        3) Wait SEQ=1 (busy)
+        4) Wait SEQ=0 (idle)
+        """
+        # Ensure idle
+        with self._rod_lock:
+            busy = (self.rod_seq_active == 1)
+
+        if busy:
+            self.get_logger().warn("⚠️ Rod busy; waiting for idle BEFORE starting...")
+            if not self.wait_rod_idle(timeout_s=timeout_s):
+                return False
+
+        if not self.call_trigger_blocking(client, action_name, timeout_s=5.0):
+            # retry once after waiting idle
+            self.get_logger().warn(f"⚠️ {action_name} failed; waiting idle and retrying once...")
+            if not self.wait_rod_idle(timeout_s=timeout_s):
+                return False
+            if not self.call_trigger_blocking(client, action_name, timeout_s=5.0):
+                return False
+
+        if not self.wait_rod_busy(timeout_s=5.0):
+            with self._rod_lock:
+                last = self.rod_state_raw
+            self.get_logger().error(f"❌ {action_name}: never saw SEQ:1. Last /rod/state: {last}")
+            return False
+
+        return self.wait_rod_idle(timeout_s=timeout_s)
+
+    # =========================================================
+    # NavigateToPose (blocking wait using events)
+    # =========================================================
+    def navigate_to_pose_blocking(self, pose_stamped: PoseStamped, timeout_s: float = 150.0) -> bool:
+        if not self.nav_to_pose_client.server_is_ready():
+            self.get_logger().error("❌ navigate_to_pose server not ready")
+            return False
+
+        goal = NavigateToPose.Goal()
+        goal.pose = pose_stamped
+
+        send_future = self.nav_to_pose_client.send_goal_async(goal)
+        if not self._wait_future(send_future, timeout_s=5.0):
+            self.get_logger().error("❌ send_goal_async timeout")
+            return False
+
+        goal_handle = send_future.result()
+        if not goal_handle or not goal_handle.accepted:
+            self.get_logger().error("❌ Navigation goal rejected")
+            return False
+
+        # keep handle so STOP can cancel
+        self.current_goal_handle = goal_handle
+
+        result_future = goal_handle.get_result_async()
+        if not self._wait_future(result_future, timeout_s=timeout_s):
+            self.get_logger().error("❌ Navigation result timeout")
+            return False
+
+        res = result_future.result()
+        status = getattr(res, "status", None)
+        if int(status) != 4:  # SUCCEEDED
+            self.get_logger().error(f"❌ Navigation failed (status={status})")
+            return False
+
+        return True
+
     # -------------------------
     # Callbacks
     # -------------------------
     def odom_callback(self, msg: Odometry):
-        # You can store current pose if needed
         pass
 
     def charge_station_callback(self, msg: Bool):
@@ -211,36 +404,28 @@ class WayPointMover(Node):
         """Load route CSV into self.waypoints. Returns True if loaded."""
         self.waypoints.clear()
         cfg = self._safe_load_yaml(self.current_files_yaml)
-
         route_path = self._resolve_route_file(cfg)
 
-        # No route selected
         if not route_path:
             self._ui("WARN", "NO_ROUTE_SELECTED", f"No route selected. Please select a route.:{self.current_files_yaml}", {})
             return False
 
-        # Missing file
         if not os.path.isfile(route_path):
-            # IMPORTANT: do NOT crash; instruct user to re-select route
             self._ui(
                 "ERROR",
                 "ROUTE_FILE_MISSING",
                 f"❌ Route file not found: {route_path} ✅ Fix: Put routes here: {self.paths_dir}/<group>/<map>/<route>.csv and re-select route from UI.",
                 {"route_file": route_path, "routes_root": self.paths_dir},
             )
-            # Also clear route in YAML so UI won't keep trying dead path
-            # (only if YAML has "route_file" or "route")
             cfg["route_file"] = ""
             cfg["route"] = ""
             self._safe_write_yaml(self.current_files_yaml, cfg)
             return False
 
-        # Read CSV safely
         try:
             with open(route_path, "r") as f:
                 reader = csv.reader(f, delimiter=",")
                 for row in reader:
-                    # Expected: x,y,z,qx,qy,qz,qw,cov0,cov1,cov2,wait
                     if len(row) < 11:
                         continue
 
@@ -257,7 +442,6 @@ class WayPointMover(Node):
                     pose.pose.orientation.w = float(row[6])
 
                     wait_s = float(row[10])
-
                     self.waypoints.append({"pose": pose, "wait": wait_s})
 
         except Exception as e:
@@ -274,7 +458,7 @@ class WayPointMover(Node):
         return True
 
     # -------------------------
-    # Follow / Stop
+    # Follow / Stop (FollowWaypoints)
     # -------------------------
     def follow_func(self):
         if self.needCheckCharger and not self.charge_connected:
@@ -333,12 +517,15 @@ class WayPointMover(Node):
         self.current_goal_handle = None
 
     def stop_func(self):
+        # Stop any home thread / loops
+        self.break_mission = True
+
         if not self.current_goal_handle:
             self._ui("WARN", "NO_ACTIVE_GOAL", "⚠️ No active goal to cancel.", {})
             self.on_the_route = False
             return
 
-        self._ui("INFO", "CANCEL_REQ", "🚨 Canceling current route...", {})
+        self._ui("INFO", "CANCEL_REQ", "🚨 Canceling current goal...", {})
         try:
             cancel_future = self.current_goal_handle.cancel_goal_async()
             cancel_future.add_done_callback(self._cancel_done_cb)
@@ -350,7 +537,6 @@ class WayPointMover(Node):
     def _cancel_done_cb(self, future):
         try:
             resp = future.result()
-            # nav2 returns CancelGoal_Response with goals_canceling list
             if hasattr(resp, "goals_canceling") and len(resp.goals_canceling) > 0:
                 self._ui("INFO", "CANCELED", "✅ Goal successfully canceled.", {})
             else:
@@ -373,7 +559,6 @@ class WayPointMover(Node):
             self._ui("WARN", "INDEX_OOR", "⚠️ Waypoint index out of range.", {"idx_1based": idx_1based})
             return
 
-        # Cancel any existing
         if self.current_goal_handle:
             self.stop_func()
             time.sleep(0.2)
@@ -399,14 +584,126 @@ class WayPointMover(Node):
         self._navigate_single_index(self.current_wp_idx + 1)
 
     # -------------------------
-    # Home (optional)
+    # Home (tailored): Go WP one-by-one + Rod extend/retract (blocking) in a background thread
     # -------------------------
     def home_func(self):
+        if self._home_running:
+            self._ui("WARN", "HOME_ALREADY_RUNNING", "⚠️ Home mission already running.", {})
+            return
+
+        if self.on_the_route:
+            self._ui("WARN", "ROUTE_ALREADY_RUNNING", "⚠️ Route already running. Stop it first.", {})
+            return
+
+        if not self.read_wp():
+            self._ui("WARN", "WP_NOT_READY", "⚠️ No waypoints loaded. Can't run Home mission.", {})
+            return
+
         if not self.nav_to_pose_client.server_is_ready():
             self._ui("WARN", "HOME_UNAVAILABLE", "navigate_to_pose server not ready.", {})
             return
-        # This assumes folders_handler (or some node) writes "home_pose" to YAML in future.
-        self._ui("WARN", "HOME_NOT_IMPLEMENTED", "Home is not implemented yet (needs stored home pose).", {})
+
+        self.break_mission = False
+        self._home_running = True
+
+        self._ui(
+            "INFO",
+            "HOME_START",
+            f"🏁 Home mission: Iterative WP loop + Rod Extend/Retract for {len(self.waypoints)} WPs (until stopped)",
+            {},
+        )
+
+        def _runner():
+            try:
+                if not self.wait_for_rod_state_msg(timeout_s=3.0):
+                    self.get_logger().warn("⚠️ No /rod/state received yet (continuing anyway)")
+
+                # 🌍 POST MAP ONCE (at mission start)
+                try:
+                    self.post_waypoints_to_server()
+                except Exception as e:
+                    self.get_logger().warn(f"⚠️ Map POST skipped due to error: {e}")
+
+                lap = 0
+
+                # 🔁 Repeat forever until break_mission is set
+                while rclpy.ok() and not self.break_mission:
+                    lap += 1
+                    self._ui("INFO", "HOME_LAP_START", f"🔁 Starting lap {lap}", {"lap": lap})
+
+                    for i, item in enumerate(self.waypoints, start=1):
+                        if self.break_mission:
+                            self._ui("WARN", "HOME_ABORTED", "🛑 Home mission stopped by user.", {"at_wp": i, "lap": lap})
+                            return
+
+                        ps = item["pose"]
+                        self._ui("INFO", "HOME_GOTO", f"🚗 Going to WP {i}/{len(self.waypoints)} (lap {lap})", {"wp": i, "lap": lap})
+
+                        ok = self.navigate_to_pose_blocking(ps, timeout_s=200.0)
+                        if not ok:
+                            self._ui("ERROR", "HOME_NAV_FAIL", f"❌ Navigation failed at WP {i} (lap {lap}). Skipping.", {"wp": i, "lap": lap})
+                            continue
+
+                        # 🌍 GET current location after reaching WP
+                        try:
+                            self.send_current_location(i)  # i is 1-based
+                        except Exception as e:
+                            self.get_logger().warn(f"⚠️ CurrentLocation GET skipped: {e}")
+
+                        try:
+                            self._ui("INFO", "ROD_EXTEND", f"⬆️ Rod extend at WP {i} (lap {lap})", {"wp": i, "lap": lap})
+                            if not self.start_and_wait_rod("extend", self.rod_extend_cli, timeout_s=180.0):
+                                self._ui("ERROR", "ROD_EXTEND_FAIL", f"❌ Extend failed at WP {i} (lap {lap}). Attempting retract.", {"wp": i, "lap": lap})
+                        finally:
+                            self._ui("INFO", "ROD_RETRACT", f"⬇️ Rod retract at WP {i} (lap {lap})", {"wp": i, "lap": lap})
+                            self.start_and_wait_rod("retract", self.rod_retract_cli, timeout_s=180.0)
+
+                    self._ui("INFO", "HOME_LAP_DONE", f"✅ Lap {lap} completed.", {"lap": lap})
+
+                # if loop exits normally
+                self._ui("INFO", "HOME_STOPPED", "🛑 Home mission stopped.", {"lap": lap})
+
+            finally:
+                self._home_running = False
+                self.current_goal_handle = None
+
+        self._home_thread = threading.Thread(target=_runner, daemon=True)
+        self._home_thread.start()
+
+    
+    def post_waypoints_to_server(self):
+        url = "https://amr.wfp-smartwarehouse.in/api/api/map"
+        payload = []
+
+        for idx, item in enumerate(self.waypoints, start=1):
+            ps = item["pose"]
+            payload.append({
+                "id": idx,
+                "name": f"Location {idx}",
+                "coordinates": {
+                    "x": float(ps.pose.position.x),
+                    "y": float(ps.pose.position.y),
+                }
+            })
+
+        # close the loop like sample payload
+        if payload:
+            payload.append(payload[0])
+
+        try:
+            r = requests.post(url, json=payload, timeout=5)
+            self.get_logger().info(f"📡 Map POST → {r.status_code}")
+        except Exception as e:
+            self.get_logger().error(f"❌ Map POST failed: {e}")
+
+
+    def send_current_location(self, wp_index_1based: int):
+        url = f"https://amr.wfp-smartwarehouse.in/api/currentLocation?location={wp_index_1based}"
+        try:
+            r = requests.get(url, timeout=3)
+            self.get_logger().info(f"📍 CurrentLocation={wp_index_1based} → {r.status_code}")
+        except Exception as e:
+            self.get_logger().error(f"❌ Location GET failed: {e}")
 
     # -------------------------
     # UI Operation commands
@@ -414,13 +711,13 @@ class WayPointMover(Node):
     def ui_operation_callback(self, msg: String):
         cmd = (msg.data or "").strip()
 
-        # Accept both "start" and "follow_route"
         if cmd in ("start", "follow_route"):
             self.follow_func()
             return
 
         if cmd == "stop":
             self.stop_func()
+            self._call_trigger(self.rod_stop_cli, "ROD_stop")
             return
 
         if cmd == "next_point":
@@ -435,8 +732,15 @@ class WayPointMover(Node):
             self.home_func()
             return
 
-        # IMPORTANT: ignore commands that are not for this node (no spam)
-        # self._ui("WARN", "UNKNOWN_CMD", "Unknown command received.", {"cmd": cmd})
+        if cmd == "rod_extend":
+            self._call_trigger(self.rod_extend_cli, "ROD_EXTEND")
+            return
+
+        if cmd == "rod_retract":
+            self._call_trigger(self.rod_retract_cli, "ROD_RETRACT")
+            return
+
+        # Ignore unknown commands silently
 
 
 def main(args=None):

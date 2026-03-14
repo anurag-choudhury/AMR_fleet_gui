@@ -51,7 +51,7 @@ def generate_launch_description():
         folder_handler_node,
         rosbridge_server,
         way_points_navigation_launch,
-        # flask_launch
+        flask_launch
     #      ExecuteProcess(
     #      cmd=['python3', flask_script],
     #      output='screen'

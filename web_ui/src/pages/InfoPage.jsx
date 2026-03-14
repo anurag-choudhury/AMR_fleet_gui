@@ -27,7 +27,7 @@ const InfoPage = () => {
     new window.ROSLIB.Topic({
       ros,
       name: AppConfig.BATTERY_TOPIC,
-      messageType: "sensor_msgs/BatteryState",
+      messageType: "robotnik_battery_msgs/msg/BatteryStatus",
     }),
   );
 
@@ -45,7 +45,7 @@ const InfoPage = () => {
     });
 
     batteryTopic.current.subscribe((data) => {
-      const batteryData = data.percentage;
+      const batteryData = data.level;
       setBatteryData(batteryData);
     });
 

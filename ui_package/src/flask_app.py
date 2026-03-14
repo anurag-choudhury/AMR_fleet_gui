@@ -9,7 +9,7 @@ from rclpy.node import Node
 class FlaskNode(Node):
     def __init__(self):
         super().__init__('flask_app_node')
-        self.declare_parameter('app_address', '127.0.0.1')
+        self.declare_parameter('app_address', '0.0.0.0')
         self.declare_parameter('port_app', 50505)
 
 # Flask app setup

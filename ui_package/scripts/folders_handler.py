@@ -57,8 +57,8 @@ class UIFoldersHandler(Node):
         self.declare_parameter("odom_topic", "/odom")
 
         # Launch strings
-        self.declare_parameter("mappingLaunch", "slam_toolbox online_async_launch.py")
-        self.declare_parameter("navigationLaunch", "ebot_nav2 ebot_bringup_launch.py")
+        self.declare_parameter("mappingLaunch", "amr_nav online_async_launch.py")
+        self.declare_parameter("navigationLaunch", "amr_nav navigation.launch.py")
 
         # Demo defaults
         self.declare_parameter("demo_group", "nan")
@@ -1174,7 +1174,7 @@ class UIFoldersHandler(Node):
                 self.rename_route_func()
             else:
                 # ignore waypoint handler commands (other node)
-                if cmd in ("start", "stop", "follow_route", "next_point", "previous_point", "home"):
+                if cmd in ("start", "stop", "follow_route", "next_point", "previous_point", "home", "rod_extend", "ROD_RETRACT"):
                     return
                 self._ui_warn("UNKNOWN_CMD", "Unknown command received.", cmd=cmd)
 

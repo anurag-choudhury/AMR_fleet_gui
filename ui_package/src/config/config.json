@@ -14,12 +14,12 @@
   "SET_POINT": "/may_set_point",
   "WP_REQ": "/WP_req",
   "SENSORS_TOPIC": "/sensors",
-  "BATTERY_TOPIC": "/battery_status",
-  "CHARGE_STATION_CONNECTED": "/charge_station_connected",
+  "BATTERY_TOPIC": "/robot/battery_estimator/data",
+  "CHARGE_STATION_CONNECTED": "/robot/battery_estimator/data",
   "NAV2_MAP_TOPIC": "/map",
   "NAV2_MAP_FRAME": "map",
   "NAV2_INITIAL_POSE_TOPIC": "/initialpose",
-  "MAX_LINEAR_SPEED": 0.5,
-  "MAX_ANGULAR_SPEED": 3.5,
+  "MAX_LINEAR_SPEED": 0.2,
+  "MAX_ANGULAR_SPEED": 0.5,
   "LASER_SCAN_TOPIC": "/filtered_scan"
 }

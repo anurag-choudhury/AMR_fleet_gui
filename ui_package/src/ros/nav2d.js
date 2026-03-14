@@ -584,7 +584,7 @@ const initLaserScanOverlay = (ros) => {
     ros,
     name: scanTopic,
     messageType: "sensor_msgs/msg/LaserScan",
-    throttle_rate: 80,
+    throttle_rate: 2,
   });
 
   let rx = 0;
