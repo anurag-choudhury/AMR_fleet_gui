@@ -57,8 +57,8 @@ class UIFoldersHandler(Node):
         self.declare_parameter("odom_topic", "/odom")
 
         # Launch strings
-        self.declare_parameter("mappingLaunch", "mr_robot_nav online_async_launch.py")
-        self.declare_parameter("navigationLaunch", "mr_robot_nav navigation.launch.py")
+        self.declare_parameter("mappingLaunch", "amr_nav rtab.launch.py")
+        self.declare_parameter("navigationLaunch", "amr_nav navigation.launch.py")
 
         # Demo defaults
         self.declare_parameter("demo_group", "nan")
@@ -138,11 +138,11 @@ class UIFoldersHandler(Node):
         self._ui_info("STARTED", "UI folders handler started", data_dir=self.data_dir)
 
         # If slam_toolbox already running (page refresh / node restart), warn and tell user to cancel mapping
-        if self._detect_slam_toolbox_running():
+        if self._detect_rtabmap_running():
             self.mapping_active = True
             self._ui_warn(
-                "SLAM_DETECTED",
-                "⚠️ slam_toolbox appears to be running already (maybe page refresh / node restart). "
+                "RTAB_DETECTED",
+                "⚠️ RTAB appears to be running already (maybe page refresh / node restart). "
                 "Use 'cancel_mapping' to exit mapping mode safely.",
             )
 
@@ -452,110 +452,65 @@ class UIFoldersHandler(Node):
     # =========================
     # slam_toolbox process helpers
     # =========================
-    def _detect_slam_toolbox_running(self) -> bool:
-        """
-        Detect slam_toolbox nodes by ROS graph (best-effort).
-        """
+    def _detect_rtabmap_running(self) -> bool:
         try:
             names = [n for (n, _ns) in self.get_node_names_and_namespaces()]
             for n in names:
-                if "slam_toolbox" in n:
+                if "rtabmap" in n:
                     return True
         except Exception:
             pass
         return False
 
-    def _force_kill_slam_toolbox(self):
-        """
-        Best-effort force-stop slam_toolbox if we lost the Popen handle (node restarted).
-        This is intentionally limited to slam_toolbox-related patterns.
-        """
+    def _force_kill_rtabmap(self):
         if not self.allow_force_kill_slam:
-            self._ui_warn("SLAM_FORCE_DISABLED", "Force-kill slam_toolbox is disabled by parameter.")
             return
 
         try:
-            # Try common patterns (limited scope)
-            subprocess.call("pkill -f slam_toolbox >/dev/null 2>&1", shell=True)
-            subprocess.call("pkill -f async_slam_toolbox_node >/dev/null 2>&1", shell=True)
-            subprocess.call("pkill -f sync_slam_toolbox_node >/dev/null 2>&1", shell=True)
-            self._ui_warn("SLAM_FORCE_KILL", "⚠️ Forced stop requested for slam_toolbox (best-effort).")
+            subprocess.call("pkill -f rtabmap >/dev/null 2>&1", shell=True)
+            subprocess.call("pkill -f rtabmap_launch >/dev/null 2>&1", shell=True)
+            self._ui_warn("RTAB_FORCE_KILL", "⚠️ Forced stop requested for RTAB-Map.")
         except Exception as e:
-            self._ui_warn("SLAM_FORCE_KILL_FAIL", "Force stop failed.", err=str(e))
-
-    def _stop_slam_toolbox(self):
-        """
-        Stop slam_toolbox if we started it.
-        If we didn't start it but detect it's running, allow best-effort force kill via pkill.
-        """
+            self._ui_warn("RTAB_FORCE_KILL_FAIL", "Force stop failed.", err=str(e))
+    def _stop_rtabmap(self):
         try:
-            # If we have a process handle, stop cleanly
+            self._ui_info("RTAB_STOP_REQ", "Stopping RTAB-Map...")
             if self.slam_proc is not None:
                 if self.slam_proc.poll() is not None:
                     self.slam_proc = None
                     return
 
                 pid = self.slam_proc.pid
-                try:
-                    pgid = os.getpgid(pid)
-                except Exception:
-                    pgid = None
+                pgid = os.getpgid(pid)
 
-                self._ui_info("SLAM_STOP_REQ", "Stopping slam_toolbox...", pid=pid)
+                self._ui_info("RTAB_STOP_REQ", "Stopping RTAB-Map...", pid=pid)
 
-                # Graceful Ctrl+C
-                if pgid is not None:
-                    os.killpg(pgid, signal.SIGINT)
-                else:
-                    os.kill(pid, signal.SIGINT)
+                os.killpg(pgid, signal.SIGINT)
 
                 try:
                     self.slam_proc.wait(timeout=3.0)
-                    self._ui_info("SLAM_STOPPED", "slam_toolbox stopped.", pid=pid)
+                    self._ui_info("RTAB_STOPPED", "RTAB-Map stopped.")
                     self.slam_proc = None
                     return
-                except Exception:
+                except:
                     pass
 
-                # SIGTERM
-                if pgid is not None:
-                    os.killpg(pgid, signal.SIGTERM)
-                else:
-                    os.kill(pid, signal.SIGTERM)
-
-                try:
-                    self.slam_proc.wait(timeout=2.0)
-                    self._ui_info("SLAM_STOPPED", "slam_toolbox stopped (SIGTERM).", pid=pid)
-                    self.slam_proc = None
-                    return
-                except Exception:
-                    pass
-
-                # SIGKILL
-                if pgid is not None:
-                    os.killpg(pgid, signal.SIGKILL)
-                else:
-                    os.kill(pid, signal.SIGKILL)
-
-                self._ui_warn("SLAM_KILLED", "slam_toolbox killed (SIGKILL).", pid=pid)
+                os.killpg(pgid, signal.SIGKILL)
+                self._ui_warn("RTAB_KILLED", "RTAB-Map killed.")
                 self.slam_proc = None
                 return
 
-            # No handle: if slam seems running, do best-effort force stop
-            if self._detect_slam_toolbox_running():
-                self._force_kill_slam_toolbox()
+            # fallback
+            if self._detect_rtabmap_running():
+                self._force_kill_rtabmap()
 
         except Exception as e:
-            self._ui_warn("SLAM_STOP_FAIL", "Failed stopping slam_toolbox.", err=str(e))
+            self._ui_warn("RTAB_STOP_FAIL", "Failed stopping RTAB-Map.", err=str(e))
 
-    def _start_slam_toolbox(self):
-        """
-        Start slam_toolbox, storing a Popen handle.
-        """
+    def _start_rtabmap(self):
         try:
-            # Stop any existing slam we started
-            self._stop_slam_toolbox()
-
+            self._stop_rtabmap()
+            
             self.slam_proc = subprocess.Popen(
                 f"ros2 launch {self.mappingCmd}",
                 stdout=subprocess.PIPE,
@@ -563,9 +518,11 @@ class UIFoldersHandler(Node):
                 shell=True,
                 preexec_fn=os.setsid,
             )
-            self._ui_info("SLAM_STARTED", "slam_toolbox started.", pid=self.slam_proc.pid)
+
+            self._ui_info("RTAB_STARTED", "RTAB-Map started.", pid=self.slam_proc.pid)
+
         except Exception as e:
-            self._ui_error("SLAM_START_FAIL", "Failed to start slam_toolbox.", err=str(e))
+            self._ui_error("RTAB_START_FAIL", "Failed to start RTAB-Map.", err=str(e))
             self.slam_proc = None
 
     # =========================
@@ -716,7 +673,7 @@ class UIFoldersHandler(Node):
             self._ui_info("MAPPING_START", "Mapping started. Drive robot around to build map.")
 
             self._pause_nav2_for_mapping()
-            self._start_slam_toolbox()
+            self._start_rtabmap()
 
             self.mapping_active = True
         except Exception as e:
@@ -730,7 +687,7 @@ class UIFoldersHandler(Node):
         """
         try:
             self._ui_info("MAPPING_CANCEL", "Cancel mapping requested. Exiting mapping mode (no save).")
-            self._stop_slam_toolbox()
+            self._stop_rtabmap()
             self._resume_nav2_after_mapping()
             self.mapping_active = False
         except Exception as e:
@@ -769,7 +726,7 @@ class UIFoldersHandler(Node):
             self.WPs.clear()
 
             # Stop SLAM (so it stops publishing /map)
-            self._stop_slam_toolbox()
+            self._stop_rtabmap()
 
             # Resume Nav2 lifecycle (so map_server/amcl become active again)
             self._resume_nav2_after_mapping()
@@ -798,9 +755,9 @@ class UIFoldersHandler(Node):
         """
         try:
             # If mapping is running (even if page refreshed), exit mapping mode first
-            if self.mapping_active or self._detect_slam_toolbox_running():
+            if self.mapping_active or self._detect_rtabmap_running():
                 self._ui_warn("MAPPING_ACTIVE", "⚠️ Mapping is active. Stopping SLAM and restoring navigation mode.")
-                self._stop_slam_toolbox()
+                self._stop_rtabmap()
                 self._resume_nav2_after_mapping()
                 self.mapping_active = False
 
