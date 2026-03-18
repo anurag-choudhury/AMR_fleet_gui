@@ -3,29 +3,45 @@ import { NavLink } from "react-router-dom";
 
 const Header = () => {
   return (
-    <header className="bg-themeBlue flex items-center justify-end gap-20 border-b-2 border-white border-b-white border-opacity-90  px-[50px] font-[RobotoMono] text-white">
-      <nav className="flex gap-20 py-[30px] text-lg lg:text-2xl">
+    <header className="flex items-center justify-center bg-slate-900 border-b border-slate-800 px-4 sm:px-6 flex-shrink-0">
+      <nav className="flex gap-8 sm:gap-12 lg:gap-16 py-3 text-sm sm:text-base lg:text-lg font-medium">
         <NavLink
           to="/"
-          className="hover:text-textWhiteHover active:text-textWhiteActive"
+          className={({ isActive }) =>
+            isActive
+              ? "text-blue-400 border-b-2 border-blue-400 pb-1 transition-colors"
+              : "text-slate-300 hover:text-white transition-colors pb-1"
+          }
         >
           Map
         </NavLink>
         <NavLink
           to="/route"
-          className="hover:text-textWhiteHover active:text-textWhiteActive"
+          className={({ isActive }) =>
+            isActive
+              ? "text-blue-400 border-b-2 border-blue-400 pb-1 transition-colors"
+              : "text-slate-300 hover:text-white transition-colors pb-1"
+          }
         >
           Route
         </NavLink>
         <NavLink
           to="/control"
-          className="hover:text-textWhiteHover active:text-textWhiteActive"
+          className={({ isActive }) =>
+            isActive
+              ? "text-blue-400 border-b-2 border-blue-400 pb-1 transition-colors"
+              : "text-slate-300 hover:text-white transition-colors pb-1"
+          }
         >
           Control
         </NavLink>
         <NavLink
           to="/info"
-          className="hover:text-textWhiteHover active:text-textWhiteActive"
+          className={({ isActive }) =>
+            isActive
+              ? "text-blue-400 border-b-2 border-blue-400 pb-1 transition-colors"
+              : "text-slate-300 hover:text-white transition-colors pb-1"
+          }
         >
           Info
         </NavLink>

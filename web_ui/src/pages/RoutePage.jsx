@@ -13,7 +13,7 @@ import { AppConfig } from "../shared/constants/index";
 import { testStructure } from "../shared/constants/testjson";
 
 import TimeModal from "../components/modal/TimeModal";
-import RouteModal from "../components/modal/RouteModal";
+import FilesModal from "../components/modal/FilesModal";
 import TextInputModal from "../components/modal/TextInputModal";
 
 import Map from "../components/Map";
@@ -128,6 +128,7 @@ const RoutePage = () => {
   const [openInputModal, setOpenInputModal] = useState(false);
 
   const [filesData, setFilesData] = useState([]);
+  const [fullFilesData, setFullFilesData] = useState([]);
 
   const childRef = useRef(null);
   const routesModalType = useRef(null);
@@ -164,10 +165,6 @@ const RoutePage = () => {
   );
 
   const onMapClickHandler = useCallback(() => {
-    /**
-     * У нас при отжатии кнопки канвас генерирует window.NAV2D.orientatedPointItem, который нужен внутри sendPointToRobot, onMapClickHandler тоже срабатывает при отжатии кнопки и на момент вызова sendPointToRobot orientatedPointItem ещё не создан. Для решения проблемы сейчас и используется костыль из таймера.
-     */
-
     if (!window.NAV2D.arePointsSettable) return;
 
     let timeObj = {
@@ -239,6 +236,7 @@ const RoutePage = () => {
         activeFilesWithSpaces,
       );
 
+      setFullFilesData(arrayWithSpaces);
       setFilesData(filtredArrayBySelectedRoute);
       setSelectedFile(activeFilesWithSpaces);
     });
@@ -252,6 +250,7 @@ const RoutePage = () => {
       const mapElement = currentMap.getMapRef();
       if (mapElement) {
         mapElement.removeEventListener("mouseup", onMapClickHandler);
+        mapElement.removeEventListener("touchend", onMapClickHandler);
       }
     };
   }, [onMapClickHandler]);
@@ -270,28 +269,17 @@ const RoutePage = () => {
       const operationsConfig = {
         CHANGE_ROUTE: {
           path: "change_route",
-          data: {
-            group: selectedFile.group,
-            map: selectedFile.map,
-            route: data,
-          },
+          data: { group: data.group, map: data.map, route: data.route },
           preActions: () => window.NAV2D.ClearMap(),
           postActions: () =>
-            setFilesData({
-              group: selectedFile.group,
-              map: selectedFile.map,
-              route: data,
-            }),
+            setSelectedFile({ group: data.group, map: data.map, route: data.route }),
         },
       };
 
       const currentOperation = operationsConfig[modalKey.current];
       if (currentOperation) {
         currentOperation.preActions && currentOperation.preActions();
-        const objToSendWithoutSpaces = processObjectStrings(
-          currentOperation.data,
-        );
-
+        const objToSendWithoutSpaces = processObjectStrings(currentOperation.data);
         const stringifiedObjToSend = JSON.stringify(objToSendWithoutSpaces);
         const messageToSend = `${currentOperation.path}/${stringifiedObjToSend}`;
         onOperationTopicPublish(messageToSend);
@@ -305,10 +293,8 @@ const RoutePage = () => {
     routesModalHeader.current = null;
   };
 
-  // TODELETE
   const onTimeFormSubmitHandler = (data) => {
     setOpenTimeModal(false);
-
     if (data) {
       window.NAV2D.sendPointToRobot(ros, data);
     } else {
@@ -329,19 +315,9 @@ const RoutePage = () => {
       const operationsConfig = {
         SAVE_ROUTE: {
           path: "save_route",
-          data: {
-            group: selectedFile.group,
-            map: selectedFile.map,
-            route: data,
-          },
-
+          data: { group: selectedFile.group, map: selectedFile.map, route: data },
           postActions: () => {
-            const mapElement = childRef.current.getMapRef();
-
-            if (mapElement) {
-              mapElement.removeEventListener("mouseup", onMapClickHandler);
-            }
-
+            removeMapListeners();
             setPointsSettable(false);
             selectedFile.route = data;
             setSelectedPointType(null);
@@ -349,36 +325,20 @@ const RoutePage = () => {
             window.NAV2D.arePointsSettable = false;
           },
         },
-
         RENAME_ROUTE: {
           path: "rename_route",
-          data: {
-            group: selectedFile.group,
-            map: selectedFile.map,
-            route_old: selectedFile.route,
-            route_new: data,
-          },
+          data: { group: selectedFile.group, map: selectedFile.map, route_old: selectedFile.route, route_new: data },
           postActions: () => {
-            const newFileData = {
-              group: selectedFile.group,
-              map: selectedFile.map,
-              route: data,
-            };
-            setSelectedFile(newFileData);
+            setSelectedFile({ group: selectedFile.group, map: selectedFile.map, route: data });
           },
         },
       };
 
       const currentOperation = operationsConfig[modalKey.current];
-
       if (currentOperation) {
         currentOperation.preActions && currentOperation.preActions();
-
-        const objToSendWithoutSpaces = processObjectStrings(
-          currentOperation.data,
-        );
+        const objToSendWithoutSpaces = processObjectStrings(currentOperation.data);
         const stringifiedObjToSend = JSON.stringify(objToSendWithoutSpaces);
-
         const messageToSend = `${currentOperation.path}/${stringifiedObjToSend}`;
         onOperationTopicPublish(messageToSend);
         currentOperation.postActions && currentOperation.postActions();
@@ -391,58 +351,49 @@ const RoutePage = () => {
   };
 
   /* BUTTON HANDLERS */
-  const onNewRouteClick = () => {
-    setSelectedPointType(null);
-    setSelectedFile({
-      group: selectedFile.group,
-      map: selectedFile.map,
-      route: "New route",
-    });
-
-    window.NAV2D.pointType = null;
-    window.NAV2D.arePointsSettable = true;
-
+  const addMapListeners = () => {
     const mapElement = childRef.current.getMapRef();
-
     if (mapElement) {
       mapElement.addEventListener("mouseup", onMapClickHandler);
+      mapElement.addEventListener("touchend", onMapClickHandler);
     }
+  };
 
+  const removeMapListeners = () => {
+    const mapElement = childRef.current.getMapRef();
+    if (mapElement) {
+      mapElement.removeEventListener("mouseup", onMapClickHandler);
+      mapElement.removeEventListener("touchend", onMapClickHandler);
+    }
+  };
+
+  const onNewRouteClick = () => {
+    setSelectedPointType(null);
+    setSelectedFile({ group: selectedFile.group, map: selectedFile.map, route: "New route" });
+    window.NAV2D.pointType = null;
+    window.NAV2D.arePointsSettable = true;
+    addMapListeners();
     setPointsSettable(true);
     window.NAV2D.ClearMap();
+    window.NAV2D.pointsFromTopic = [];
     onOperationTopicPublish("clear_route");
   };
 
   const onSaveRouteClick = () => {
     if (!pointsSettable) return;
-
     if (selectedFile.route !== "New route") {
-      const dataToSend = {
-        group: selectedFile.group,
-        map: selectedFile.map,
-        route: selectedFile.route,
-      };
-
+      const dataToSend = { group: selectedFile.group, map: selectedFile.map, route: selectedFile.route };
       const objToSendWithoutSpaces = processObjectStrings(dataToSend);
       const stringifiedObjToSend = JSON.stringify(objToSendWithoutSpaces);
-
       const messageToSend = `save_route/${stringifiedObjToSend}`;
       onOperationTopicPublish(messageToSend);
-
       setSelectedPointType(null);
       window.NAV2D.pointType = null;
       window.NAV2D.arePointsSettable = false;
-
-      const mapElement = childRef.current.getMapRef();
-
-      if (mapElement) {
-        mapElement.removeEventListener("mouseup", onMapClickHandler);
-      }
-
+      removeMapListeners();
       setPointsSettable(false);
       return;
     }
-
     modalKey.current = "SAVE_ROUTE";
     textInputHeader.current = "Enter new route name";
     textInputPlaceholder.current = "Name...";
@@ -452,7 +403,6 @@ const RoutePage = () => {
   const onChangeRouteClick = () => {
     window.NAV2D.arePointsSettable = false;
     setPointsSettable(false);
-
     modalKey.current = "CHANGE_ROUTE";
     routesModalType.current = "selectRoute";
     isRoutesModalWithInput.current = false;
@@ -464,28 +414,13 @@ const RoutePage = () => {
     if (pointsSettable) {
       setPointsSettable(false);
     } else {
-      window.NAV2D.ClearMap();
-
-      const currentRouteData = {
-        group: selectedFile.group,
-        map: selectedFile.map,
-        route: selectedFile.route,
-      };
-
+      const currentRouteData = { group: selectedFile.group, map: selectedFile.map, route: selectedFile.route };
       const objToSendWithoutSpaces = processObjectStrings(currentRouteData);
       const stringifiedObjToSend = JSON.stringify(objToSendWithoutSpaces);
-
       const messageToSend = `edit_route/${stringifiedObjToSend}`;
-
       onOperationTopicPublish(messageToSend);
-
       window.NAV2D.arePointsSettable = true;
-
-      const mapElement = childRef.current.getMapRef();
-      if (mapElement) {
-        mapElement.addEventListener("mouseup", onMapClickHandler);
-      }
-
+      addMapListeners();
       setPointsSettable(true);
     }
   };
@@ -493,23 +428,23 @@ const RoutePage = () => {
   const onClearRouteClick = () => {
     if (!pointsSettable) return;
     window.NAV2D.ClearMap();
+    window.NAV2D.pointsFromTopic = [];
     onOperationTopicPublish("clear_route");
+  };
+
+  const onUndoRouteClick = () => {
+    if (!pointsSettable) return;
+    if (window.NAV2D && window.NAV2D.UndoPoint) {
+      window.NAV2D.UndoPoint();
+    }
   };
 
   const onDeleteRouteClick = () => {
     window.NAV2D.ClearMap();
-
-    const currentRouteData = {
-      group: selectedFile.group,
-      map: selectedFile.map,
-      route: selectedFile.route,
-    };
-
+    const currentRouteData = { group: selectedFile.group, map: selectedFile.map, route: selectedFile.route };
     const objToSendWithoutSpaces = processObjectStrings(currentRouteData);
     const stringifiedObjToSend = JSON.stringify(objToSendWithoutSpaces);
-
     const messageToSend = `delete_route/${stringifiedObjToSend}`;
-
     onOperationTopicPublish(messageToSend);
   };
 
@@ -531,9 +466,12 @@ const RoutePage = () => {
       <ToastContainer />
 
       {openRouteModal && (
-        <RouteModal
-          routesList={filesData}
+        <FilesModal
+          filesList={fullFilesData}
           headerText={routesModalHeader.current}
+          mode={routesModalType.current}
+          hasInput={isRoutesModalWithInput.current}
+          inputPlaceholder={null}
           modalHandler={onRouteFormSubmitHandler}
         />
       )}
@@ -549,136 +487,100 @@ const RoutePage = () => {
         />
       )}
 
-      {/* Responsive outer padding; PC layout preserved from md+ */}
-      <div className="sectionHeight flex flex-col gap-5 px-4 pt-6 sm:px-6 md:gap-7 md:px-8 md:pt-[30px]">
-        <h2 className="flex w-full flex-wrap items-center justify-center gap-3 text-center font-[RobotoMono] text-xl font-bold text-themeBlue sm:text-2xl md:text-3xl">
-          <span>
-            Group:{" "}
-            <span className="text-themeDarkBlue">{selectedFile.group}</span>
-          </span>
-          <span>
-            Map: <span className="text-themeDarkBlue">{selectedFile.map}</span>
-          </span>
-          <span>
-            {selectedFile.route !== "New route" && <span>Current route:</span>}{" "}
-            <span className="text-themeDarkBlue">{selectedFile.route}</span>
-          </span>
-        </h2>
-
-        {/* KEEP PC STRUCTURE: md:flex-row exactly like yours; mobile stacks */}
-        <div className="flex h-full flex-col justify-start gap-8 md:flex-row md:gap-[73px]">
-          {/* MAP COLUMN */}
-          <section className="color-white flex w-full flex-col items-start justify-start md:w-[55%]">
-            <div className="h-[280px] w-full sm:h-[360px] md:h-[400px] lg:h-[674px]">
-              <Map ref={childRef} />
+      {/* Main Wrapper: Full viewport height minus the parent header */}
+      <div className="flex flex-col h-[calc(100vh-60px)] w-full bg-slate-950 overflow-hidden">
+        
+        {/* TOP: Status Bar */}
+        <div className="flex items-center justify-between px-6 py-4 bg-slate-900 border-b border-slate-800 flex-shrink-0">
+          <div className="flex items-center gap-6">
+            <h1 className="text-xl font-bold text-white tracking-wide">Route Editor</h1>
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-full bg-emerald-500"></span>
+              <span className="text-sm text-slate-300">
+                Group: <span className="font-semibold text-white">{selectedFile.group || "Null"}</span>
+              </span>
             </div>
-          </section>
-
-          {/* RIGHT COLUMN */}
-          <section className="color-white flex w-full flex-1 flex-col items-center justify-start gap-6 md:w-2/5 md:gap-7 lg:gap-[233px]">
-            {/* Buttons */}
-            <div className="flex w-full flex-col gap-5 lg:gap-3">
-              {/* Row 1 */}
-              <div className="flex w-full flex-col items-center justify-center gap-3 sm:flex-row sm:gap-3">
-                <div className="w-full flex-1">
-                  <Button onBtnClick={onEditRouteClick}>
-                    {pointsSettable && <div>Cancel</div>}
-                    {!pointsSettable && (
-                      <div>
-                        <span className="iconMap" />
-                        <span className="mx-auto">Edit</span>
-                      </div>
-                    )}
-                  </Button>
-                </div>
-                <div className="w-full flex-1">
-                  <Button
-                    onBtnClick={onChangeRouteClick}
-                    type={pointsSettable ? "disabled" : ""}
-                  >
-                    <span className="iconCharge" />
-                    <span className="mx-auto">Change</span>
-                  </Button>
-                </div>
-                <div className="w-full flex-1">
-                  <Button
-                    onBtnClick={onSaveRouteClick}
-                    type={pointsSettable ? "" : "disabled"}
-                  >
-                    <span className="iconSave" />
-                    <span className="mx-auto">Save</span>
-                  </Button>
-                </div>
-              </div>
-
-              {/* Row 2 */}
-              <div className="flex w-full flex-col items-center justify-center gap-3 sm:flex-row sm:gap-3">
-                <div className="w-full flex-1">
-                  <Button
-                    onBtnClick={onNewRouteClick}
-                    type={pointsSettable ? "disabled" : ""}
-                  >
-                    <span className="iconPlus" />
-                    <span className="mx-auto">Create</span>
-                  </Button>
-                </div>
-                <div className="w-full flex-1">
-                  <Button
-                    onBtnClick={onRenameRouteClick}
-                    type={
-                      pointsSettable || selectedFile.route === "Null"
-                        ? "disabled"
-                        : ""
-                    }
-                  >
-                    <span className="iconMap" />
-                    <span className="mx-auto">Rename</span>
-                  </Button>
-                </div>
-                <div className="w-full flex-1">
-                  <Button
-                    onBtnClick={onDeleteRouteClick}
-                    type={pointsSettable ? "disabled" : ""}
-                  >
-                    <span className="iconTrash" />
-                    <span className="mx-auto">Delete</span>
-                  </Button>
-                </div>
-              </div>
-
-              {/* Row 3 */}
-              <div className="flex w-full flex-col items-center justify-center gap-3 sm:flex-row sm:gap-3">
-                <div className="w-full flex-1">
-                  <Button
-                    onBtnClick={onClearRouteClick}
-                    type={!pointsSettable ? "disabled" : ""}
-                  >
-                    <span className="iconMap" />
-                    <span className="mx-auto">Clear</span>
-                  </Button>
-                </div>
-
-                {/* spacer so on desktop it still looks like 3-column row */}
-                <div className="hidden w-full flex-1 sm:block" />
-                <div className="hidden w-full flex-1 sm:block" />
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-full bg-blue-500"></span>
+              <span className="text-sm text-slate-300">
+                Map: <span className="font-semibold text-white">{selectedFile.map || "Null"}</span>
+              </span>
             </div>
-
-            {/* Logs: scroll on small screens, keep your fixed heights for PC */}
-            <div className="h-full w-full flex-grow">
-              <div className="max-h-[220px] min-h-[180px] overflow-auto sm:max-h-[240px] md:max-h-[200px] md:min-h-[200px]">
-                <Logs />
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-full bg-purple-500"></span>
+              <span className="text-sm text-slate-300">
+                Route: <span className="font-semibold text-white">{selectedFile.route || "Null"}</span>
+              </span>
             </div>
-          </section>
+          </div>
+          {pointsSettable && (
+            <div className="flex items-center gap-2 bg-emerald-500/20 border border-emerald-500/40 rounded-md px-3 py-1.5">
+              <span className="relative flex h-2 w-2 flex-shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="text-xs font-medium text-emerald-300">
+                Edit mode — click &amp; drag to add waypoints
+              </span>
+            </div>
+          )}
         </div>
+
+        {/* MIDDLE: Primary Map Area */}
+        <div className="flex-1 min-h-0 relative bg-slate-950 p-2">
+          {/* Map wrapper to ensure it fills the container */}
+          <div className="w-full h-full rounded-md overflow-hidden bg-white shadow-inner flex items-center justify-center">
+             <Map ref={childRef} />
+          </div>
+        </div>
+
+        {/* BOTTOM: Split Panel (Messages | Route Operations) */}
+        <div className="h-[40vh] min-h-[300px] flex-shrink-0 bg-slate-900 flex flex-row w-full border-t border-slate-800">
+          
+          {/* 1. Messages Panel */}
+          <div className="flex-1 flex flex-col min-w-0 border-r border-slate-800 p-4">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Messages</span>
+            <div className="flex-1 bg-slate-950 rounded-md p-3 overflow-auto border border-slate-800 text-sm">
+              <Logs />
+            </div>
+          </div>
+
+          {/* 2. Route Operations Management Block */}
+          <div className="w-[450px] flex-shrink-0 flex flex-col p-4 overflow-y-auto">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-3">Route Operations</span>
+            <div className="grid grid-cols-3 gap-2">
+              <Button size="small" onBtnClick={onEditRouteClick}>
+                {pointsSettable ? "Cancel" : "Edit"}
+              </Button>
+              <Button size="small" onBtnClick={onChangeRouteClick} type={pointsSettable ? "disabled" : ""}>
+                Change
+              </Button>
+              <Button size="small" onBtnClick={onSaveRouteClick} type={pointsSettable ? "" : "disabled"}>
+                Save
+              </Button>
+              <Button size="small" onBtnClick={onNewRouteClick} type={pointsSettable ? "disabled" : ""}>
+                Create
+              </Button>
+              <Button size="small" onBtnClick={onRenameRouteClick} type={pointsSettable || selectedFile.route === "Null" ? "disabled" : ""}>
+                Rename
+              </Button>
+              <Button size="small" onBtnClick={onDeleteRouteClick} type={pointsSettable ? "disabled" : ""}>
+                Delete
+              </Button>
+              <Button size="small" onBtnClick={onClearRouteClick} type={!pointsSettable ? "disabled" : ""}>
+                Clear
+              </Button>
+              <Button size="small" onBtnClick={onUndoRouteClick} type={!pointsSettable ? "disabled" : ""}>
+                Undo
+              </Button>
+            </div>
+          </div>
+
+        </div>
+
       </div>
     </>
   );
 };
 
 export default RoutePage;
-
-/*
-  (your commented point buttons remain unchanged)
-*/

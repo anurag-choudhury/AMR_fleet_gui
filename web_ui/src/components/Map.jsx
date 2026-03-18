@@ -104,6 +104,7 @@ const Map = forwardRef((props, ref) => {
 
   useEffect(() => {
     window.NAV2D.InitMap(ros);
+    window.NAV2D.onMapTabActivated?.();
   }, [ros]);
 
   const zoomMap = (value) => {
@@ -111,7 +112,7 @@ const Map = forwardRef((props, ref) => {
       ros,
       rootObject: window.NAV2D.canvas.scene,
     });
-    zoomTopic.startZoom(300, 200);
+    zoomTopic.startZoom(canvasWidth / 2, canvasHeight / 2);
     zoomTopic.zoom(value);
   };
 

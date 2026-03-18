@@ -7,9 +7,7 @@ import { testStructure } from "../shared/constants/testjson";
 
 import { RosContext } from "../app/App";
 
-
 import Map from "../components/Map";
-// import Camera from "../components/Camera";
 import Logs from "../components/Logs";
 import Joystick from "../components/Joystick";
 import FilesModal from "../components/modal/FilesModal";
@@ -72,6 +70,17 @@ const MapPage = () => {
   const [filesData, setFilesData] = useState([]);
   const [selectedFile, setSelectedFile] = useState({ group: "", map: "" });
   const [inEditMode, setIsEditMode] = useState(false);
+  const [isPoseMode, setIsPoseMode] = useState(false);
+
+  // Sync React state when nav2d.js resets isInitialPoseMode after pose is published
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (isPoseMode && window.isInitialPoseMode === false) {
+        setIsPoseMode(false);
+      }
+    }, 200);
+    return () => clearInterval(interval);
+  }, [isPoseMode]);
 
   const modalKey = useRef(null);
   const filesModalType = useRef(null);
@@ -216,7 +225,6 @@ const MapPage = () => {
               toast.warn("You need to select group and provide map name");
               return;
             }
-
             if (data.inputValue.toString().includes("_")) {
               isBreaked = true;
               toast.warn("Symbol '_' is forbidden");
@@ -233,7 +241,6 @@ const MapPage = () => {
               toast.warn("You need to provide group name");
               return;
             }
-
             if (data.inputValue.toString().includes("_")) {
               isBreaked = true;
               toast.warn("Symbol '_' is forbidden");
@@ -258,7 +265,6 @@ const MapPage = () => {
               toast.warn("You need to choose map and provide map new name");
               return;
             }
-
             if (data.inputValue.toString().includes("_")) {
               isBreaked = true;
               toast.warn("Symbol '_' is forbidden");
@@ -302,11 +308,20 @@ const MapPage = () => {
     filesModalPlaceholder.current = null;
   };
 
-  // In your map.jsx or a shared initialization file
-  window.isInitialPoseMode = false;
+  // Ensure window flag is initialised only once
+  if (window.isInitialPoseMode === undefined) {
+    window.isInitialPoseMode = false;
+  }
+
   const init_pose = () => {
     window.isInitialPoseMode = true;
-    console.log("Click on the map to set the initial pose of the robot.");
+    setIsPoseMode(true);
+    console.log("Click and drag on the map to set the initial pose of the robot.");
+  };
+
+  const cancel_pose = () => {
+    window.isInitialPoseMode = false;
+    setIsPoseMode(false);
   };
 
   return (
@@ -324,135 +339,128 @@ const MapPage = () => {
         />
       )}
 
-      <div className="sectionHeight flex flex-col gap-5 px-4 pt-6 sm:px-6 lg:px-8 lg:gap-7 lg:pt-[30px]">
-        <h2 className="w-full text-center font-[RobotoMono] text-xl font-bold text-themeBlue sm:text-2xl lg:text-3xl">
-          Group: <span className="text-themeDarkBlue">{selectedFile.group} </span>
-          Map: <span className="text-themeDarkBlue">{selectedFile.map}</span>
-        </h2>
+      {/* Main Wrapper: Full viewport height minus the parent header */}
+      <div className="flex flex-col h-[calc(100vh-60px)] w-full bg-slate-950 overflow-hidden">
 
-        {/* MAP SECTION */}
-        <section className="flex w-full flex-col gap-4 lg:flex-row lg:gap-[8%]">
-          <div className="h-[260px] w-full sm:h-[320px] lg:h-[486px] lg:w-1/2">
-            <Map />
-          </div>
-
-          {/* If you enable Camera later */}
-          {/* <div className="h-[260px] w-full sm:h-[320px] lg:h-[486px] lg:w-1/2">
-            <Camera />
-          </div> */}
-        </section>
-
-        {/* CONTROLS / JOYSTICK / LOGS */}
-        <section className="mt-2 flex w-full flex-col gap-6 xl:mt-0 xl:flex-row xl:items-start xl:justify-between xl:gap-10">
-          {/* LEFT: BUTTONS */}
-          <div className="w-full xl:w-1/2">
-            <div className="flex w-full flex-col gap-3">
-              {/* Row 1 */}
-              <div className="flex w-full flex-wrap items-center justify-center gap-2 md:justify-start">
-                <div className="w-full sm:w-auto">
-                  <Button
-                    size="small"
-                    onBtnClick={onChangeMapClick}
-                    type={inEditMode ? "disabled" : ""}
-                  >
-                    <span className="iconMap" />
-                    <span className="mx-auto">Change</span>
-                  </Button>
-                </div>
-
-                <div className="w-full sm:w-auto">
-                  <Button
-                    size="small"
-                    onBtnClick={onSaveMapClick}
-                    type={inEditMode ? "" : "disabled"}
-                    disabled={true}
-                  >
-                    <span className="iconMap" />
-                    <span className="mx-auto">Save</span>
-                  </Button>
-                </div>
-              </div>
-
-              {/* Row 2 */}
-              <div className="flex w-full flex-wrap items-center justify-center gap-2 md:justify-start">
-                <div className="w-full sm:w-auto">
-                  <Button
-                    size="small"
-                    onBtnClick={onNewMapClick}
-                    type={inEditMode ? "disabled" : ""}
-                    disabled={false}
-                  >
-                    <span className="iconMap" />
-                    <span className="mx-auto">Create</span>
-                  </Button>
-                </div>
-
-                <div className="w-full sm:w-auto">
-                  <Button
-                    size="small"
-                    onBtnClick={onRenameMapClick}
-                    type={inEditMode ? "disabled" : ""}
-                  >
-                    <span className="iconMap" />
-                    <span className="mx-auto">Rename</span>
-                  </Button>
-                </div>
-
-                <div className="w-full sm:w-auto">
-                  <Button
-                    size="small"
-                    onBtnClick={onDeleteMapClick}
-                    type={inEditMode ? "disabled" : ""}
-                  >
-                    <span className="iconMap" />
-                    <span className="mx-auto">Delete</span>
-                  </Button>
-                </div>
-              </div>
-
-              {/* Row 3 */}
-              <div className="flex w-full flex-wrap items-center justify-center gap-2 md:justify-start">
-                <div className="w-full sm:w-auto">
-                  <Button size="small" onBtnClick={onCreateGroupClick}>
-                    <span className="iconGroup" />
-                    <span className="mx-auto">Create</span>
-                  </Button>
-                </div>
-
-                <div className="w-full sm:w-auto">
-                  <Button
-                    size="small"
-                    onBtnClick={onDeleteGroupClick}
-                    type={inEditMode ? "disabled" : ""}
-                  >
-                    <span className="iconGroup" />
-                    <span className="mx-auto">Delete</span>
-                  </Button>
-                </div>
-
-                <button
-                  onClick={init_pose}
-                  className="w-full rounded-2xl bg-black p-2 text-white sm:w-auto"
-                  id="initializePoseButton"
-                >
-                  Initialize Pose
-                </button>
-              </div>
+        {/* TOP: Status Bar */}
+        <div className="flex items-center justify-between px-6 py-4 bg-slate-900 border-b border-slate-800 flex-shrink-0">
+          <div className="flex items-center gap-6">
+            <h1 className="text-xl font-bold text-white tracking-wide">AMR Controller</h1>
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-full bg-emerald-500"></span>
+              <span className="text-sm text-slate-300">
+                Group: <span className="font-semibold text-white">{selectedFile.group || "Null"}</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-full bg-blue-500"></span>
+              <span className="text-sm text-slate-300">
+                Map: <span className="font-semibold text-white">{selectedFile.map || "Null"}</span>
+              </span>
             </div>
           </div>
 
-          {/* MIDDLE: JOYSTICK */}
-          <div className="w-full xl:w-auto">
-            <Joystick />
+          <div className="flex items-center gap-3">
+            {isPoseMode && (
+              <div className="flex items-center gap-2 bg-amber-500/20 border border-amber-500/40 rounded-md px-3 py-1.5">
+                <span className="relative flex h-2 w-2 flex-shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                </span>
+                <span className="text-xs font-medium text-amber-300">
+                  Pose mode — click &amp; drag on map
+                </span>
+              </div>
+            )}
+            {isPoseMode ? (
+              <button
+                onClick={cancel_pose}
+                className="rounded-lg bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-medium py-2 px-6 transition-all duration-200 shadow-sm hover:shadow-md text-sm flex items-center gap-2"
+              >
+                Cancel Pose
+              </button>
+            ) : (
+              <button
+                onClick={init_pose}
+                className="rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-medium py-2 px-6 transition-all duration-200 shadow-sm hover:shadow-md text-sm"
+              >
+                Initialize Pose
+              </button>
+            )}
           </div>
+        </div>
 
-          {/* RIGHT: LOGS */}
-          <div className="w-full xl:w-1/3 xl:max-w-[700px]">
-            <div className="max-h-[220px] overflow-auto sm:max-h-[260px] xl:max-h-[180px]">
+        {/* MIDDLE: Primary Map Area */}
+        <div className="flex-1 min-h-0 relative bg-slate-950 p-2">
+          {/* Map wrapper to ensure it fills the container */}
+          <div className="w-full h-full rounded-md overflow-hidden bg-white shadow-inner flex items-center justify-center">
+            <Map />
+          </div>
+        </div>
+
+        {/* BOTTOM: Split Panel */}
+        <div className="h-[40vh] min-h-[300px] flex-shrink-0 bg-slate-900 flex flex-row w-full border-t border-slate-800">
+
+          {/* 1. Messages Panel */}
+          <div className="flex-1 flex flex-col min-w-0 border-r border-slate-800 p-4">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Messages</span>
+            <div className="flex-1 bg-slate-950 rounded-md p-3 overflow-auto border border-slate-800 text-sm">
               <Logs />
             </div>
           </div>
-        </section>
+
+          {/* 2. Joystick Container - REDUCED WIDTH & CENTERED JOYSTICK */}
+          <div className="w-60 flex-shrink-0 flex flex-col items-center border-r border-slate-800 p-4 bg-slate-900">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 w-full text-center">Controller</span>
+            <div className="flex-1 w-full flex items-center justify-center relative">
+              {/* Removed the CSS scale transform that was misaligning the joystick */}
+              <Joystick />
+            </div>
+          </div>
+
+          {/* 3. Management Panels */}
+          <div className="w-[450px] flex-shrink-0 flex flex-col p-4 overflow-y-auto">
+
+            {/* Map Management Block */}
+            <div className="mb-4">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-3">Map Management</span>
+              <div className="grid grid-cols-3 gap-2">
+                <Button size="small" onBtnClick={onChangeMapClick} type={inEditMode ? "disabled" : ""}>
+                  Change
+                </Button>
+                <Button size="small" onBtnClick={onSaveMapClick} type={inEditMode ? "" : "disabled"}>
+                  Save
+                </Button>
+                <Button size="small" onBtnClick={onNewMapClick} type={inEditMode ? "disabled" : ""}>
+                  Create
+                </Button>
+                <Button size="small" onBtnClick={onRenameMapClick} type={inEditMode ? "disabled" : ""}>
+                  Rename
+                </Button>
+                <Button size="small" onBtnClick={onDeleteMapClick} type={inEditMode ? "disabled" : ""}>
+                  Delete
+                </Button>
+              </div>
+            </div>
+
+            <div className="h-px bg-slate-800 w-full mb-4"></div>
+
+            {/* Group Management Block */}
+            <div>
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-3">Group Management</span>
+              <div className="grid grid-cols-2 gap-2 w-2/3">
+                <Button size="small" onBtnClick={onCreateGroupClick}>
+                  Create
+                </Button>
+                <Button size="small" onBtnClick={onDeleteGroupClick} type={inEditMode ? "disabled" : ""}>
+                  Delete
+                </Button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
       </div>
     </>
   );
