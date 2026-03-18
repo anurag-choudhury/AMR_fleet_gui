@@ -266,6 +266,18 @@ window.NAV2D.ClearMap = () => {
   );
   window.NAV2D.pointsArray = [];
 };
+
+/* Undo last point */
+window.NAV2D.UndoPoint = () => {
+  if (window.NAV2D.pointsFromTopic && window.NAV2D.pointsFromTopic.length > 0) {
+    window.NAV2D.pointsFromTopic.pop();
+    window.NAV2D.pointsArray = drawPoints(
+      window.NAV2D.pointsFromTopic,
+      window.NAV2D.canvas.scene,
+    );
+  }
+};
+
 window.NAV2D.onMapTabActivated = () => {
   console.log("🟢 Map tab activated: reattach overlays");
 
@@ -277,6 +289,12 @@ window.NAV2D.onMapTabActivated = () => {
 
   // rescale existing points
   window.NAV2D.checkScale?.();
+
+  // ensure waypoint mouse handlers are attached to new scene
+  window.NAV2D.ensureWaypointMouseHandlers?.();
+
+  // ensure init pose handlers are attached to new scene
+  window.NAV2D.ensureInitPoseHandlers?.();
 };
 
 
@@ -284,8 +302,8 @@ const drawPoints = (points, canvas) => {
   if (!(points && canvas)) return;
   window.NAV2D.ClearMap();
 
-  window.NAV2D.pointsArray = points.map((point) => {
-    const defaultPointItem = serializePoint(point, canvas);
+  window.NAV2D.pointsArray = points.map((point, index) => {
+    const defaultPointItem = serializePoint(point, canvas, index + 1);
     canvas.addChild(defaultPointItem);
     return defaultPointItem;
   });
@@ -527,51 +545,221 @@ const initLaserScanOverlay = (ros) => {
   // =========================
   // DRAW (use current scene!)
   // =========================
+  //   const clearLaserMarkers = () => {
+  //     const canvas = getCanvas();
+  //     if (!canvas) return;
+  //     window.NAV2D.laser.markers.forEach((m) => { try { canvas.removeChild(m); } catch (e) { } });
+  //     window.NAV2D.laser.markers = [];
+  //   };
+
+  //   const makeDot = (canvas, x, y) => {
+  //     // ✅ BIG + bright + no stroke (no black)
+  //     const dot = new window.ROS2D.NavigationArrow({
+  //       size: 18.0,
+  //       strokeSize: 0.0,
+  //       fillColor: window.createjs.Graphics.getRGB(0, 255, 255, 1.0), // CYAN
+  //       pulse: false,
+  //     });
+
+  //     dot.compositeOperation = "lighter";
+  //     dot.alpha = 1.0;
+
+  //     dot.x = x;
+  //     dot.y = -y;
+
+  //     // keep same size while zooming
+  //     dot.scaleX = 1.0 / (canvas.scaleX || 1.0);
+  //     dot.scaleY = 1.0 / (canvas.scaleY || 1.0);
+
+  //     return dot;
+  //   };
+
+  //   // ✅ expose redraw for tab switching
+  //   window.NAV2D.laser.redraw = () => {
+  //     const canvas = getCanvas();
+  //     if (!canvas) return;
+  //     const pts = window.NAV2D.laser.lastPoints || [];
+  //     if (!pts.length) return;
+
+  //     clearLaserMarkers();
+  //     for (let i = 0; i < pts.length; i++) {
+  //       const p = pts[i];
+  //       const dot = makeDot(canvas, p.x, p.y);
+  //       window.NAV2D.laser.markers.push(dot);
+  //       canvas.addChild(dot);
+  //     }
+  //   };
+
+  //   // =========================
+  //   // LASER SUB
+  //   // =========================
+  //   if (window.NAV2D.laser.scan) {
+  //     try { window.NAV2D.laser.scan.unsubscribe(); } catch (e) { }
+  //     window.NAV2D.laser.scan = null;
+  //   }
+
+  //   const scan = new window.ROSLIB.Topic({
+  //     ros,
+  //     name: scanTopic,
+  //     messageType: "sensor_msgs/msg/LaserScan",
+  //     throttle_rate: 80,
+  //   });
+
+  //   let rx = 0;
+
+  //   scan.subscribe((msg) => {
+  //     rx++;
+  //     if (!window.NAV2D.laser.enabled) return;
+  //     if (rx % DRAW_EVERY_N !== 0) return;
+
+  //     const canvas = getCanvas();
+  //     if (!canvas) return;
+
+  //     const laserFrame = norm(msg?.header?.frame_id);
+  //     if (!laserFrame) return;
+
+  //     const chain1 = [mapFrame, odomFrame, baseLink, baseMid, laserFrame];
+  //     const chain2 = [mapFrame, odomFrame, baseLink, laserFrame];
+  //     const T_map_laser = getChain2D(chain1) || getChain2D(chain2);
+  //     if (!T_map_laser) return;
+
+  //     const ranges = msg.ranges || [];
+  //     const angleMin = msg.angle_min ?? 0;
+  //     const angleInc = msg.angle_increment ?? 0;
+  //     const rMin = msg.range_min ?? 0.05;
+  //     const rMax = msg.range_max ?? 30.0;
+
+  //     const pts = [];
+  //     const step = Math.max(1, Math.floor(ranges.length / MAX_POINTS));
+
+  //     for (let i = 0; i < ranges.length && pts.length < MAX_POINTS; i += step) {
+  //       const r = ranges[i];
+  //       if (!Number.isFinite(r)) continue;
+  //       if (r < rMin || r > rMax) continue;
+
+  //       const a = angleMin + i * angleInc;
+  //       const lx = r * Math.cos(a);
+  //       const ly = r * Math.sin(a);
+
+  //       pts.push(transformPoint2D(T_map_laser, lx, ly));
+  //     }
+
+  //     window.NAV2D.laser.lastPoints = pts;
+  //     window.NAV2D.laser.redraw();
+
+
+  //     // draw to CURRENT canvas
+  //     // window.NAV2D.laser.redraw();
+  //   });
+
+  //   window.NAV2D.laser.scan = scan;
+
+  //   console.log("✅ [LaserOverlay] init complete", { mapFrame, odomFrame, baseLink, baseMid, scanTopic });
+  // };
+
+  // Single shape for performant drawing of the scan cloud and lines
+  if (!window.NAV2D.laser.shape) {
+    window.NAV2D.laser.shape = new window.createjs.Shape();
+    window.NAV2D.laser.shape.name = "laser_cloud";
+  }
+
   const clearLaserMarkers = () => {
-    const canvas = getCanvas();
-    if (!canvas) return;
-    window.NAV2D.laser.markers.forEach((m) => { try { canvas.removeChild(m); } catch (e) { } });
-    window.NAV2D.laser.markers = [];
-  };
-
-  const makeDot = (canvas, x, y) => {
-    // ✅ BIG + bright + no stroke (no black)
-    const dot = new window.ROS2D.NavigationArrow({
-      size: 18.0,
-      strokeSize: 0.0,
-      fillColor: window.createjs.Graphics.getRGB(0, 255, 255, 1.0), // CYAN
-      pulse: false,
-    });
-
-    dot.compositeOperation = "lighter";
-    dot.alpha = 1.0;
-
-    dot.x = x;
-    dot.y = -y;
-
-    // keep same size while zooming
-    dot.scaleX = 1.0 / (canvas.scaleX || 1.0);
-    dot.scaleY = 1.0 / (canvas.scaleY || 1.0);
-
-    return dot;
-  };
-
-  // ✅ expose redraw for tab switching
-  window.NAV2D.laser.redraw = () => {
-    const canvas = getCanvas();
-    if (!canvas) return;
-    const pts = window.NAV2D.laser.lastPoints || [];
-    if (!pts.length) return;
-
-    clearLaserMarkers();
-    for (let i = 0; i < pts.length; i++) {
-      const p = pts[i];
-      const dot = makeDot(canvas, p.x, p.y);
-      window.NAV2D.laser.markers.push(dot);
-      canvas.addChild(dot);
+    if (window.NAV2D.laser.shape) {
+      window.NAV2D.laser.shape.graphics.clear();
     }
   };
 
+  // ✅ Expose redraw for tab switching and zoom scaling
+  // window.NAV2D.laser.redraw = () => {
+  //   const canvas = getCanvas();
+  //   if (!canvas) return;
+
+  //   // Ensure shape is attached to the current canvas view
+  //   if (window.NAV2D.laser.shape.parent !== canvas) {
+  //     if (window.NAV2D.laser.shape.parent) {
+  //       window.NAV2D.laser.shape.parent.removeChild(window.NAV2D.laser.shape);
+  //     }
+  //     canvas.addChild(window.NAV2D.laser.shape);
+  //   }
+
+  //   const scanData = window.NAV2D.laser.lastScanData;
+  //   if (!scanData) return;
+
+  //   const { origin, polyPts, hitPaths } = scanData;
+  //   const g = window.NAV2D.laser.shape.graphics;
+  //   g.clear();
+
+  //   const zoom = canvas.scaleX || 1.0;
+
+  //   // 1. Draw the "Cloud" (Filled area representing cleared/free space)
+  //   // Using a light Teal/Green tint (identifiable against white, but not overpowering)
+  //   g.beginFill("rgba(32, 178, 170, 0.2)");
+  //   g.moveTo(origin.x, -origin.y);
+  //   for (const pt of polyPts) {
+  //     g.lineTo(pt.x, -pt.y);
+  //   }
+  //   g.lineTo(origin.x, -origin.y);
+  //   g.endFill();
+
+  //   // 2. Draw the Obstructions (Valid laser hits) as dotted lines
+  //   g.setStrokeStyle(2.0 / zoom, "round", "round");
+  //   g.setStrokeDash([6 / zoom, 5 / zoom]); // Dashed effect that scales nicely with zoom
+  //   g.beginStroke("rgba(32, 178, 170, 0.9)"); // Stronger Teal/Green for the boundary
+
+  //   for (const path of hitPaths) {
+  //     if (path.length > 0) {
+  //       g.moveTo(path[0].x, -path[0].y);
+  //       for (let i = 1; i < path.length; i++) {
+  //         g.lineTo(path[i].x, -path[i].y);
+  //       }
+  //     }
+  //   }
+  //   g.endStroke();
+  //   g.setStrokeDash(); // Reset dash
+  // };
+
+  window.NAV2D.laser.redraw = () => {
+    const canvas = getCanvas();
+    if (!canvas) return;
+
+    // Ensure shape is attached to the current canvas view
+    if (window.NAV2D.laser.shape.parent !== canvas) {
+      if (window.NAV2D.laser.shape.parent) {
+        window.NAV2D.laser.shape.parent.removeChild(window.NAV2D.laser.shape);
+      }
+      canvas.addChild(window.NAV2D.laser.shape);
+    }
+
+    const scanData = window.NAV2D.laser.lastScanData;
+    if (!scanData) return;
+
+    const { origin, polyPts, hitPaths } = scanData;
+    const g = window.NAV2D.laser.shape.graphics;
+    g.clear();
+
+    const zoom = canvas.scaleX || 1.0;
+
+    // 1. Draw the "Cloud" (Filled area representing cleared/free space)
+    g.beginFill("rgba(32, 178, 170, 0.2)");
+    g.moveTo(origin.x, -origin.y);
+    for (const pt of polyPts) {
+      g.lineTo(pt.x, -pt.y);
+    }
+    g.lineTo(origin.x, -origin.y);
+    g.endFill();
+
+    // 2. Draw the Obstructions (Valid laser hits) as explicit dots
+    // This avoids the 'setStrokeDash' error in older CreateJS versions
+    const dotRadius = Math.max(0.04, 0.05 / zoom); // Keeps dots visible at any zoom
+    g.beginFill("rgba(32, 178, 170, 0.9)"); // Stronger Teal/Green for the boundary dots
+
+    for (const path of hitPaths) {
+      for (const pt of path) {
+        g.drawCircle(pt.x, -pt.y, dotRadius);
+      }
+    }
+    g.endFill();
+  };
   // =========================
   // LASER SUB
   // =========================
@@ -611,37 +799,96 @@ const initLaserScanOverlay = (ros) => {
     const rMin = msg.range_min ?? 0.05;
     const rMax = msg.range_max ?? 30.0;
 
-    const pts = [];
+    // Origin of the laser scanner in Map coordinates
+    // const origin = { x: T_map_laser.x, y: T_map_laser.y };
+
+    // const polyPts = [];
+    // const hitPaths = [];
+    // let currentPath = [];
+
+    // const step = Math.max(1, Math.floor(ranges.length / MAX_POINTS));
+
+    // for (let i = 0; i < ranges.length; i += step) {
+    //   let r = ranges[i];
+    //   let isHit = true;
+
+    //   // If the ray hits nothing (infinity/NaN/out-of-range), we stretch the "cloud"
+    //   // to rMax to show the scanned cone, but we break the boundary line
+    //   if (!Number.isFinite(r) || r < rMin || r > rMax) {
+    //     r = rMax;
+    //     isHit = false;
+    //   }
+
+    //   const a = angleMin + i * angleInc;
+    //   const lx = r * Math.cos(a);
+    //   const ly = r * Math.sin(a);
+
+    //   const pt = transformPoint2D(T_map_laser, lx, ly);
+    //   polyPts.push(pt);
+
+    //   // Group continuous hits into paths to draw solid dashed lines along walls
+    //   if (isHit) {
+    //     currentPath.push(pt);
+    //   } else {
+    //     if (currentPath.length > 0) {
+    //       hitPaths.push(currentPath);
+    //       currentPath = [];
+    //     }
+    //   }
+    // }
+
+    // // Push the final path if it exists
+    // if (currentPath.length > 0) hitPaths.push(currentPath);
+
+    const origin = { x: T_map_laser.x, y: T_map_laser.y };
+
+    const polyPts = [];
+    const hitPaths = [];
+    let currentPath = [];
+
     const step = Math.max(1, Math.floor(ranges.length / MAX_POINTS));
 
-    for (let i = 0; i < ranges.length && pts.length < MAX_POINTS; i += step) {
-      const r = ranges[i];
-      if (!Number.isFinite(r)) continue;
-      if (r < rMin || r > rMax) continue;
+    for (let i = 0; i < ranges.length; i += step) {
+      let r = ranges[i];
+      let isHit = true;
+
+      // Check if ray hit nothing (infinity/NaN) or is out of bounds
+      if (!Number.isFinite(r) || r < rMin || r > rMax) {
+        isHit = false;
+        r = 1.5; // Use a short distance (1.5m) for the flashlight cone in open space to prevent map bleeding
+      }
 
       const a = angleMin + i * angleInc;
-      const lx = r * Math.cos(a);
-      const ly = r * Math.sin(a);
 
-      pts.push(transformPoint2D(T_map_laser, lx, ly));
+      // Calculate coordinate for the visual cloud (capped at 4 meters max so it doesn't bleed over corners)
+      const cloudR = isHit ? Math.min(r, 4.0) : 1.5;
+      const cloudPt = transformPoint2D(T_map_laser, cloudR * Math.cos(a), cloudR * Math.sin(a));
+      polyPts.push(cloudPt);
+
+      // Calculate exact coordinate for the boundary dots (lands exactly on the physical map walls)
+      if (isHit) {
+        const truePt = transformPoint2D(T_map_laser, r * Math.cos(a), r * Math.sin(a));
+        currentPath.push(truePt);
+      } else {
+        if (currentPath.length > 0) {
+          hitPaths.push(currentPath);
+          currentPath = [];
+        }
+      }
     }
 
-    window.NAV2D.laser.lastPoints = pts;
+    // Push the final path if it exists
+    if (currentPath.length > 0) hitPaths.push(currentPath);
+
+    // Save the state and trigger redraw
+    window.NAV2D.laser.lastScanData = { origin, polyPts, hitPaths };
     window.NAV2D.laser.redraw();
-
-
-    // draw to CURRENT canvas
-    // window.NAV2D.laser.redraw();
   });
 
   window.NAV2D.laser.scan = scan;
 
   console.log("✅ [LaserOverlay] init complete", { mapFrame, odomFrame, baseLink, baseMid, scanTopic });
 };
-
-
-
-
 
 const initLaserScanOverlay_ScanOnly = (ros) => {
   console.log("✅ [ScanOnly] initLaserScanOverlay_ScanOnly called");
@@ -901,7 +1148,7 @@ const customnavigator = (ros) => {
         return;
       }
       window.NAV2D.pointsFromTopic = data.poses;
-      window.NAV2D.pointsArray = drawPoints(data.poses, canvas);
+      window.NAV2D.pointsArray = drawPoints(data.poses, window.NAV2D.canvas.scene);
       // window.NAV2D.mapInited = false;
     },
   );
@@ -1198,12 +1445,23 @@ window.NAV2D.sendPointToRobot = (ros, time) => {
 
   wayPoint.publish(new window.ROSLIB.Message(messageObject));
 
+  // ✅ Optimistic UI rendering: add waypoint to local collection & redraw map
+  // This makes it visible immediately without waiting for a refresh
+  window.NAV2D.pointsFromTopic = window.NAV2D.pointsFromTopic || [];
+  window.NAV2D.pointsFromTopic.push(messageObject);
+  window.NAV2D.pointsArray = drawPoints(
+    window.NAV2D.pointsFromTopic,
+    window.NAV2D.canvas.scene,
+  );
+
   // ✅ clear only after successful publish
   window.NAV2D.finishedPointItem = null;
 };
 
 
-const serializePoint = (point, canvas) => {
+const serializePoint = (point, canvas, markerNumber) => {
+  const container = new window.createjs.Container();
+
   const defaultPointItem = createCanvasPoint(15, {
     r: 255,
     g: 0,
@@ -1211,177 +1469,229 @@ const serializePoint = (point, canvas) => {
     a: 1,
   });
 
-  defaultPointItem.x = point.pose.pose.position.x;
-  defaultPointItem.y = -point.pose.pose.position.y;
-  defaultPointItem.rotation = canvas.rosQuaternionToGlobalTheta(
-    point.pose.pose.orientation,
-  );
-  defaultPointItem.scaleX = 1.0 / canvas.scaleX;
-  defaultPointItem.scaleY = 1.0 / canvas.scaleY;
+  const rot = canvas.rosQuaternionToGlobalTheta(point.pose.pose.orientation);
+  defaultPointItem.rotation = rot;
 
-  return defaultPointItem;
+  container.addChild(defaultPointItem);
+
+  if (markerNumber !== undefined) {
+    const textLabel = new window.createjs.Text(String(markerNumber), "bold 14px Arial", "#000000");
+    textLabel.textAlign = "center";
+    textLabel.textBaseline = "middle";
+    // Position text slightly above the marker
+    textLabel.y = -20;
+    // ensure text stays upright
+    textLabel.rotation = 0;
+    container.addChild(textLabel);
+  }
+
+  container.x = point.pose.pose.position.x;
+  container.y = -point.pose.pose.position.y;
+  container.scaleX = 1.0 / canvas.scaleX;
+  container.scaleY = 1.0 / canvas.scaleY;
+
+  // Add click listener to individually delete this waypoint in edit mode
+  container.addEventListener("dblclick", () => {
+    if (!window.NAV2D.arePointsSettable) return;
+    if (window.NAV2D.pointsFromTopic) {
+      const idx = window.NAV2D.pointsFromTopic.indexOf(point);
+      if (idx > -1) {
+        window.NAV2D.pointsFromTopic.splice(idx, 1);
+        window.NAV2D.pointsArray = drawPoints(
+          window.NAV2D.pointsFromTopic,
+          canvas
+        );
+      }
+    }
+  });
+
+  return container;
 };
+window.NAV2D._initPoseHandlers = window.NAV2D._initPoseHandlers || {
+  attachedTo: null,
+  down: null,
+  move: null,
+  up: null,
+};
+
 const init_pose_fn = (ros) => {
-  // Variables for Initialize Pose
-  // let isInitialPoseMode = false;
-  let initialPoseMousePressed = false;
-  let initialPoseMouseMoved = false;
-  let initialPosePositionVectorItem = null;
-  let initialPoseOrientationMarker = null;
-  console.log(window.NAV2D)
-  const canvas = window.NAV2D.canvas.scene
 
-  // Mouse down handler for Initialize Pose
-  const handleInitialPoseMouseDown = (event) => {
-    console.log(window.isInitialPoseMode)
-    if (!window.isInitialPoseMode) return; // Check the global flag
-    initialPoseMousePressed = true;
-    const positionItem = canvas.globalToRos(event.stageX, event.stageY);
-    initialPosePositionVectorItem = new window.ROSLIB.Vector3(positionItem);
-  };
-
-  const handleInitialPoseMouseMove = (event) => {
-    if (!initialPoseMousePressed || !window.isInitialPoseMode) return; // Check the global flag
-    initialPoseMouseMoved = true;
-
-    // Remove previous orientation marker (if any)
-    if (initialPoseOrientationMarker) {
-      canvas.removeChild(initialPoseOrientationMarker);
+  const attachInitPoseHandlers = () => {
+    const canvas = window.NAV2D?.canvas?.scene;
+    if (!canvas) {
+      console.warn("⚠️ init_pose: canvas not ready, skipping handler attach");
+      return;
     }
 
-    const currentPos = canvas.globalToRos(event.stageX, event.stageY);
-    const currentPositionVectorItem = new window.ROSLIB.Vector3(currentPos);
-
-    initialPoseOrientationMarker = createCanvasPoint(25, {
-      r: 0,
-      g: 255,
-      b: 0,
-      a: 1,
-    });
-
-    const xDelta = currentPositionVectorItem.x - initialPosePositionVectorItem.x;
-    const yDelta = currentPositionVectorItem.y - initialPosePositionVectorItem.y;
-    const thetaRadians = Math.atan2(xDelta, yDelta);
-    let thetaDegrees = thetaRadians * (180.0 / Math.PI);
-
-    if (thetaDegrees >= 0 && thetaDegrees <= 180) {
-      thetaDegrees += 270;
-    } else {
-      thetaDegrees -= 90;
+    // Always tear off old handlers first
+    const old = window.NAV2D._initPoseHandlers;
+    if (old.attachedTo && old.down) {
+      try {
+        old.attachedTo.removeEventListener('stagemousedown', old.down);
+        old.attachedTo.removeEventListener('stagemousemove', old.move);
+        old.attachedTo.removeEventListener('stagemouseup', old.up);
+      } catch (e) { }
     }
 
-    initialPoseOrientationMarker.x = initialPosePositionVectorItem.x;
-    initialPoseOrientationMarker.y = -initialPosePositionVectorItem.y;
-    initialPoseOrientationMarker.rotation = thetaDegrees;
-    initialPoseOrientationMarker.scaleX = 1.0 / canvas.scaleX;
-    initialPoseOrientationMarker.scaleY = 1.0 / canvas.scaleY;
-    canvas.addChild(initialPoseOrientationMarker);
-  };
+    let initialPoseMousePressed = false;
+    let initialPoseMouseMoved = false;
+    let initialPosePositionVectorItem = null;
+    let initialPoseOrientationMarker = null;
 
-  const handleInitialPoseMouseUp = (event) => {
-    if (!initialPoseMousePressed || !window.isInitialPoseMode) return; // Check the global flag
-    initialPoseMousePressed = false;
-    initialPoseMouseMoved = false;
-
-    const goalPos = canvas.globalToRos(event.stageX, event.stageY);
-    const goalPosVec3 = new window.ROSLIB.Vector3(goalPos);
-    const xDelta = goalPosVec3.x - initialPosePositionVectorItem.x;
-    const yDelta = goalPosVec3.y - initialPosePositionVectorItem.y;
-    let thetaRadians = calculateThetaRadians(xDelta, yDelta);
-
-    const qz = Math.sin(-thetaRadians / 2.0);
-    const qw = Math.cos(-thetaRadians / 2.0);
-
-    const orientation = new window.ROSLIB.Quaternion({
-      x: 0,
-      y: 0,
-      z: qz,
-      w: qw,
-    });
-
-    const pose = new window.ROSLIB.Pose({
-      position: initialPosePositionVectorItem,
-      orientation,
-    });
-
-    // Publish the initial pose
-    publishInitialPose(pose);
-
-    // Reset mode and clean up
-    window.isInitialPoseMode = false; // Reset the global flag
-    canvas.removeChild(initialPoseOrientationMarker);
-  };
-
-  // Attach event listeners for Initialize Pose
-  canvas.addEventListener('stagemousedown', (event) => {
-    handleInitialPoseMouseDown(event);
-    canvas.addEventListener('stagemousemove', handleInitialPoseMouseMove);
-  });
-
-  canvas.addEventListener('stagemouseup', (event) => {
-    handleInitialPoseMouseUp(event);
-    canvas.removeEventListener('stagemousemove', handleInitialPoseMouseMove);
-  });
-
-  const publishInitialPose = async (pose) => {
-    // Function to get the latest TF timestamp
-    const getLatestTime = async () => {
-      return new Promise((resolve) => {
-        const tfTopic = new window.ROSLIB.Topic({
-          ros: ros,
-          name: '/tf',
-          messageType: 'tf2_msgs/TFMessage',
-        });
-
-        tfTopic.subscribe((message) => {
-          if (message.transforms.length > 0) {
-            const latestTransform = message.transforms[0];
-            resolve(latestTransform.header.stamp);
-          }
-          tfTopic.unsubscribe();
-        });
-      });
+    const handleInitialPoseMouseDown = (event) => {
+      if (!window.isInitialPoseMode) return;
+      initialPoseMousePressed = true;
+      initialPoseMouseMoved = false;
+      const positionItem = canvas.globalToRos(event.stageX, event.stageY);
+      initialPosePositionVectorItem = new window.ROSLIB.Vector3(positionItem);
     };
 
-    const latestTime = await getLatestTime();
-    const sec = latestTime.sec;
-    const nanosec = latestTime.nanosec;
+    const handleInitialPoseMouseMove = (event) => {
+      if (!initialPoseMousePressed || !window.isInitialPoseMode) return;
+      initialPoseMouseMoved = true;
 
-    const covariance = [
-      0.25, 0.0, 0.0, 0.0, 0.0, 0.0,
-      0.0, 0.25, 0.0, 0.0, 0.0, 0.0,
-      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-      0.0, 0.0, 0.0, 0.0, 0.0, 0.0685
-    ];
+      if (initialPoseOrientationMarker) {
+        canvas.removeChild(initialPoseOrientationMarker);
+      }
 
-    // Create a publisher for /initialpose
-    const initialPoseTopic = new window.ROSLIB.Topic({
-      ros: ros,
-      name: window.AppConfig.NAV2_INITIAL_POSE_TOPIC,
-      messageType: 'geometry_msgs/PoseWithCovarianceStamped',
-    });
+      const currentPos = canvas.globalToRos(event.stageX, event.stageY);
+      const currentPositionVectorItem = new window.ROSLIB.Vector3(currentPos);
 
-    // Create the initial pose message
-    const initialPoseMessage = new window.ROSLIB.Message({
-      header: {
-        frame_id: 'map',
-        stamp: { sec, nanosec },
-      },
-      pose: {
-        pose: pose,
-        covariance: covariance,
-      },
-    });
+      initialPoseOrientationMarker = createCanvasPoint(25, {
+        r: 0,
+        g: 255,
+        b: 0,
+        a: 1,
+      });
 
-    // Publish the initial pose to /initialpose
-    initialPoseTopic.publish(initialPoseMessage);
-    console.log("Initial pose published:", initialPoseMessage);
+      const xDelta = currentPositionVectorItem.x - initialPosePositionVectorItem.x;
+      const yDelta = currentPositionVectorItem.y - initialPosePositionVectorItem.y;
+      const thetaRadians = Math.atan2(xDelta, yDelta);
+      let thetaDegrees = thetaRadians * (180.0 / Math.PI);
+
+      if (thetaDegrees >= 0 && thetaDegrees <= 180) {
+        thetaDegrees += 270;
+      } else {
+        thetaDegrees -= 90;
+      }
+
+      initialPoseOrientationMarker.x = initialPosePositionVectorItem.x;
+      initialPoseOrientationMarker.y = -initialPosePositionVectorItem.y;
+      initialPoseOrientationMarker.rotation = thetaDegrees;
+      initialPoseOrientationMarker.scaleX = 1.0 / canvas.scaleX;
+      initialPoseOrientationMarker.scaleY = 1.0 / canvas.scaleY;
+      canvas.addChild(initialPoseOrientationMarker);
+    };
+
+    const handleInitialPoseMouseUp = (event) => {
+      if (!initialPoseMousePressed || !window.isInitialPoseMode) return;
+      initialPoseMousePressed = false;
+
+      if (!initialPoseMouseMoved) {
+        console.log("⚠️ Drag to set orientation (click+drag) for Initial Pose.");
+        return;
+      }
+
+      const goalPos = canvas.globalToRos(event.stageX, event.stageY);
+      const goalPosVec3 = new window.ROSLIB.Vector3(goalPos);
+      const xDelta = goalPosVec3.x - initialPosePositionVectorItem.x;
+      const yDelta = goalPosVec3.y - initialPosePositionVectorItem.y;
+      let thetaRadians = calculateThetaRadians(xDelta, yDelta);
+
+      const qz = Math.sin(-thetaRadians / 2.0);
+      const qw = Math.cos(-thetaRadians / 2.0);
+
+      const orientation = new window.ROSLIB.Quaternion({
+        x: 0,
+        y: 0,
+        z: qz,
+        w: qw,
+      });
+
+      const pose = new window.ROSLIB.Pose({
+        position: initialPosePositionVectorItem,
+        orientation,
+      });
+
+      // Publish the initial pose
+      publishInitialPose(pose);
+
+      // Reset mode and clean up
+      window.isInitialPoseMode = false;
+      if (initialPoseOrientationMarker) {
+        try { canvas.removeChild(initialPoseOrientationMarker); } catch (e) { }
+        initialPoseOrientationMarker = null;
+      }
+    };
+
+    const publishInitialPose = async (pose) => {
+      const getLatestTime = async () => {
+        return new Promise((resolve) => {
+          const tfTopic = new window.ROSLIB.Topic({
+            ros: ros,
+            name: '/tf',
+            messageType: 'tf2_msgs/TFMessage',
+          });
+
+          tfTopic.subscribe((message) => {
+            if (message.transforms.length > 0) {
+              const latestTransform = message.transforms[0];
+              resolve(latestTransform.header.stamp);
+            }
+            tfTopic.unsubscribe();
+          });
+        });
+      };
+
+      const latestTime = await getLatestTime();
+      const sec = latestTime.sec;
+      const nanosec = latestTime.nanosec;
+
+      const covariance = [
+        0.25, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.25, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0685
+      ];
+
+      const initialPoseTopic = new window.ROSLIB.Topic({
+        ros: ros,
+        name: window.AppConfig.NAV2_INITIAL_POSE_TOPIC,
+        messageType: 'geometry_msgs/PoseWithCovarianceStamped',
+      });
+
+      const initialPoseMessage = new window.ROSLIB.Message({
+        header: {
+          frame_id: 'map',
+          stamp: { sec, nanosec },
+        },
+        pose: {
+          pose: pose,
+          covariance: covariance,
+        },
+      });
+
+      initialPoseTopic.publish(initialPoseMessage);
+      console.log("Initial pose published:", initialPoseMessage);
+    };
+
+    canvas.addEventListener('stagemousedown', handleInitialPoseMouseDown);
+    canvas.addEventListener('stagemousemove', handleInitialPoseMouseMove);
+    canvas.addEventListener('stagemouseup', handleInitialPoseMouseUp);
+
+    window.NAV2D._initPoseHandlers.attachedTo = canvas;
+    window.NAV2D._initPoseHandlers.down = handleInitialPoseMouseDown;
+    window.NAV2D._initPoseHandlers.move = handleInitialPoseMouseMove;
+    window.NAV2D._initPoseHandlers.up = handleInitialPoseMouseUp;
+
+    console.log("✅ Initial pose mouse handlers attached to current scene");
   };
 
+  // expose so onMapTabActivated can call it
+  window.NAV2D.ensureInitPoseHandlers = attachInitPoseHandlers;
 
-
-
-
-}
+  // call immediately at boot
+  attachInitPoseHandlers();
+};

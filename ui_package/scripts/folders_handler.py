@@ -57,8 +57,8 @@ class UIFoldersHandler(Node):
         self.declare_parameter("odom_topic", "/odom")
 
         # Launch strings
-        self.declare_parameter("mappingLaunch", "amr_nav online_async_launch.py")
-        self.declare_parameter("navigationLaunch", "amr_nav navigation.launch.py")
+        self.declare_parameter("mappingLaunch", "mr_robot_nav online_async_launch.py")
+        self.declare_parameter("navigationLaunch", "mr_robot_nav navigation.launch.py")
 
         # Demo defaults
         self.declare_parameter("demo_group", "nan")
@@ -1089,6 +1089,30 @@ class UIFoldersHandler(Node):
         except Exception as e:
             self._ui_error("ROUTE_CHANGE_EXC", "Exception changing route.", err=str(e))
 
+    def edit_route_func(self):
+        try:
+            group = self.dict_cmd.get("group", "")
+            mp = self.dict_cmd.get("map", "")
+            route = self.dict_cmd.get("route", "")
+
+            if not (self._safe_name(group) and self._safe_name(mp) and self._safe_name(route)):
+                self._ui_error("BAD_NAME", "Invalid group/map/route name(s).", group=group, map=mp, route=route)
+                return
+
+            file_path = self._route_file(group, mp, route)
+            if not os.path.isfile(file_path):
+                self._ui_error("ROUTE_NOT_FOUND", "Route file does not exist.", route_file=file_path)
+                return
+
+            self.set_cur_route(os.path.join(self._route_dir(group, mp), route))
+            self.read_wp_safe()
+            # We don't need to publish to WP_req here, just setting it up for saving later
+            self._ui_info("ROUTE_EDIT", "Route opened for editing.", group=group, map=mp, route=route)
+            self._publish_nav_structure()
+
+        except Exception as e:
+            self._ui_error("ROUTE_EDIT_EXC", "Exception editing route.", err=str(e))
+
     def rename_route_func(self):
         try:
             group = self.dict_cmd.get("group", "")
@@ -1170,6 +1194,8 @@ class UIFoldersHandler(Node):
                 self.delete_route_func()
             elif cmd == "change_route":
                 self.change_route_func()
+            elif cmd == "edit_route":
+                self.edit_route_func()
             elif cmd == "rename_route":
                 self.rename_route_func()
             else:

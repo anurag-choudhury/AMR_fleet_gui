@@ -11,6 +11,7 @@ input[type="number"] {
 
 .mapContainer canvas {
   border-radius: 1rem;
+  touch-action: none; /* Prevent browser from intercepting touch events on tablets */
 }
 
 .sectionHeight {

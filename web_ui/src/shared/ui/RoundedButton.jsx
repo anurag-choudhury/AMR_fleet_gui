@@ -9,6 +9,9 @@ const RoundedButton = ({ type, children, onBtnClick }) => {
     case "danger":
       buttonColors = "bg-[#CD3100] hover:bg-[#A02700] active:bg-[#741500]";
       break;
+    case "orange":
+      buttonColors = "bg-[#2563EB] hover:bg-[#1D4ED8] active:bg-[#1E40AF]";
+      break;
   }
   return (
     <button

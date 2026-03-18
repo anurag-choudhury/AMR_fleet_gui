@@ -55,116 +55,68 @@ const InfoPage = () => {
   }, []);
 
   return (
-    <div className="items-stratch relative flex min-h-[70vh] flex-col gap-[30px] pt-[30px] xl:flex-row xl:gap-[7%]">
-      <section className="color-white flex w-full flex-col items-start justify-center gap-[30px] xl:w-3/5">
-        <h3 className="w-full text-center font-[RobotoMono] text-3xl font-bold text-themeBlue">
-          Camera
-        </h3>
-        <div className="h-[450px] w-full">
-          <Camera />
-        </div>
-        <div className="mt-auto w-full">
-          <RobotState />
-        </div>
-      </section>
+    <div className="flex flex-col flex-1 min-h-0 bg-slate-950 overflow-hidden">
 
-      <section className="color-white flex w-full flex-col items-center justify-center gap-[30px] xl:w-2/5">
-        <h3 className="w-full text-center font-[RobotoMono] text-3xl font-bold text-themeBlue">
-          Information
-        </h3>
+      {/* Status bar — bigger */}
+      <div className="flex items-center justify-between px-4 sm:px-6 py-2.5 bg-slate-900 border-b border-slate-800 flex-shrink-0">
+        <div className="flex items-center gap-6">
+          <h1 className="text-base sm:text-lg font-bold text-white tracking-wide">Robot Info</h1>
+          <div className="flex items-center gap-2">
+            {charge ? (
+              <>
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                <span className="text-sm text-emerald-400 font-medium">Connected to charging station</span>
+              </>
+            ) : (
+              <>
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                <span className="text-sm text-slate-300">Not connected to charging station</span>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
 
-        <div className="grid grid-cols-4 grid-rows-2 gap-x-[30px] gap-y-2 2xl:gap-x-[60px]">
+      {/* Middle: Messages (left) + Camera (center, large) */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        <div className="w-56 lg:w-64 flex-shrink-0 flex flex-col border-r border-slate-800 bg-slate-900">
+          <div className="px-3 pt-3 pb-1 flex-shrink-0">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Messages</p>
+          </div>
+          <div className="flex-1 min-h-0 overflow-auto px-3 pb-3">
+            <div className="rounded-md bg-slate-950 p-2 border border-slate-800 text-xs h-full overflow-auto">
+              <Logs />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+          <div className="flex-1 min-h-0 relative bg-slate-950 p-3">
+            <div className="h-full w-full rounded-lg overflow-hidden border border-slate-800">
+              <Camera />
+            </div>
+          </div>
+          <div className="flex-shrink-0 px-3 pb-2">
+            <RobotState />
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom bar — sensors */}
+      <div className="flex items-center gap-6 px-4 py-2.5 bg-slate-900 border-t border-slate-800 flex-shrink-0">
+        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Sensors</span>
+        <div className="flex gap-4">
           <CircularProgress
             sensorsData={sensorsData}
             sensorName="batt1"
-            color="##ff7a00"
+            color="#ff7a00"
             text="Battery , %"
             units="%"
             minValue={0}
             maxValue={100}
           />
-          {/* <CircularProgress
-            sensorsData={sensorsData}
-            sensorName="batt2"
-            color="#00e1ff"
-            text="Battery 2, %"
-            units="%"
-            minValue={0}
-            maxValue={100}
-          />
-          <CircularProgress
-            sensorsData={sensorsData}
-            sensorName="sens3"
-            color="#00ffb0"
-            text="Sensor 3"
-            units=""
-            minValue={0}
-            maxValue={100}
-          />
-          <CircularProgress
-            sensorsData={sensorsData}
-            sensorName="sens4"
-            color="#c5cc02"
-            text="Sensor 4"
-            units=""
-            minValue={0}
-            maxValue={100}
-          />
-          <CircularProgress
-            sensorsData={sensorsData}
-            sensorName="sens5"
-            color="#d96cff"
-            text="Sensor 5"
-            units=""
-            minValue={0}
-            maxValue={100}
-          />
-          <CircularProgress
-            sensorsData={sensorsData}
-            sensorName="sens6"
-            color="#FFC0CB"
-            text="Sensor 6"
-            units=""
-            minValue={0}
-            maxValue={100}
-          />
-          <CircularProgress
-            sensorsData={sensorsData}
-            sensorName="temp1"
-            color="#00a3ff"
-            text="Temp 1, ℃"
-            units="℃"
-            minValue={0}
-            maxValue={40}
-          />
-          <CircularProgress
-            sensorsData={sensorsData}
-            sensorName="temp2"
-            color="#ff48ed"
-            text="Temp 2, ℃"
-            units="℃"
-            minValue={0}
-            maxValue={40}
-          /> */}
         </div>
-
-        <h3 className="w-full text-center font-[RobotoMono] text-2xl font-bold ">
-          {charge && (
-            <span className="text-themeDarkBlue">
-              Connected to the charging station
-            </span>
-          )}
-          {!charge && (
-            <span className="text-white">
-              Not connected to the charging station
-            </span>
-          )}
-        </h3>
-
-        <div className="mt-auto h-[240px] w-full">
-          <Logs />
-        </div>
-      </section>
+      </div>
     </div>
   );
 };

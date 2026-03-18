@@ -1165,6 +1165,11 @@ ROS2D.Viewer = function (options) {
   // create the easel to use
   this.scene = new createjs.Stage(canvas);
 
+  // Enable touch events on tablets/phones — translates touch into mouse events
+  if (createjs.Touch.isSupported()) {
+    createjs.Touch.enable(this.scene);
+  }
+
   // change Y axis center
   this.scene.y = this.height;
 

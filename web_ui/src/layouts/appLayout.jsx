@@ -5,9 +5,9 @@ import Header from "../components/Header";
 
 const AppLayout = () => {
   return (
-    <div>
+    <div className="flex flex-col h-screen overflow-hidden">
       <Header />
-      <main className="mx-auto max-w-[1920px] px-6 lg:px-10 2xl:px-20">
+      <main className="flex flex-col flex-1 min-h-0 overflow-hidden">
         <Outlet />
       </main>
     </div>
