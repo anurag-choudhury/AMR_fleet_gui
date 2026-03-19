@@ -275,7 +275,7 @@ const ControlPage = () => {
                 Prev
               </Button>
               <Button size="small" onBtnClick={() => onControlBtnClick("home")}>
-                Home
+                Collect Data + Rod extend/retract + loop
               </Button>
             </div>
 
@@ -293,43 +293,53 @@ const ControlPage = () => {
           </div>
 
           {/* 3. Start / Step / Stop Panel (Right) — 3 round buttons */}
-          <div className="w-[120px] flex-shrink-0 flex flex-col items-center justify-center gap-4 p-2 border-l border-slate-800 bg-slate-900/50">
+          <div className="w-[120px] flex-shrink-0 flex flex-col items-center justify-center gap-6 p-2 border-l border-slate-800 bg-slate-900/50">
 
-            <div className="flex flex-col items-center gap-1">
-              {/* Scaled down to 70% of original size, with a slight hover bump */}
-              <div className="transform scale-[0.7] hover:scale-[0.75] transition-transform origin-center flex items-center justify-center">
-                <RoundedButton
-                  type="success"
-                  onBtnClick={() => onControlBtnClick("start")}
-                >
-                  Start
-                </RoundedButton>
+            {/* START BUTTON */}
+            <div className="flex flex-col items-center gap-2">
+              {/* 1. The bounding box: The layout ONLY sees a 64x64px square */}
+              <div className="relative w-16 h-16 flex items-center justify-center">
+                {/* 2. Absolute positioning removes the giant original button from the flex layout */}
+                <div className="absolute transform scale-[0.55] hover:scale-[0.6] transition-transform origin-center flex items-center justify-center">
+                  <RoundedButton
+                    type="success"
+                    onBtnClick={() => onControlBtnClick("start")}
+                  >
+                    Start
+                  </RoundedButton>
+                </div>
               </div>
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider text-center mt-[-8px]">Full Route</span>
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider text-center">Full Route</span>
             </div>
 
-            <div className="flex flex-col items-center gap-1">
-              <div className="transform scale-[0.7] hover:scale-[0.75] transition-transform origin-center flex items-center justify-center">
-                <RoundedButton
-                  type="orange"
-                  onBtnClick={() => onControlBtnClick("next_point")}
-                >
-                  Step
-                </RoundedButton>
+            {/* STEP BUTTON */}
+            <div className="flex flex-col items-center gap-2">
+              <div className="relative w-16 h-16 flex items-center justify-center">
+                <div className="absolute transform scale-[0.55] hover:scale-[0.6] transition-transform origin-center flex items-center justify-center">
+                  <RoundedButton
+                    type="orange"
+                    onBtnClick={() => onControlBtnClick("next_point")}
+                  >
+                    Step
+                  </RoundedButton>
+                </div>
               </div>
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider text-center mt-[-8px]">Next WP</span>
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider text-center">Next WP</span>
             </div>
 
-            <div className="flex flex-col items-center gap-1">
-              <div className="transform scale-[0.7] hover:scale-[0.75] transition-transform origin-center flex items-center justify-center">
-                <RoundedButton
-                  type="danger"
-                  onBtnClick={() => onControlBtnClick("stop")}
-                >
-                  Stop
-                </RoundedButton>
+            {/* STOP BUTTON */}
+            <div className="flex flex-col items-center gap-2">
+              <div className="relative w-16 h-16 flex items-center justify-center">
+                <div className="absolute transform scale-[0.55] hover:scale-[0.6] transition-transform origin-center flex items-center justify-center">
+                  <RoundedButton
+                    type="danger"
+                    onBtnClick={() => onControlBtnClick("stop")}
+                  >
+                    Stop
+                  </RoundedButton>
+                </div>
               </div>
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider text-center mt-[-8px]">Emergency</span>
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider text-center">Emergency</span>
             </div>
 
           </div>

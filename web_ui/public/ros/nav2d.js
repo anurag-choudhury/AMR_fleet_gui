@@ -152,7 +152,7 @@ window.NAV2D.laser = window.NAV2D.laser || {
   dotRadius: 0.03,      // meters (map units)
   maxPoints: 2500,      // safety cap
   frame: 'laser',          // laser frame id from message
-  scanTopic: "/scan",   // change if needed
+  scanTopic: "/filtered_scan",   // change if needed
 };
 
 window.NAV2D.scale = { x: 0, y: 0 };
@@ -545,221 +545,51 @@ const initLaserScanOverlay = (ros) => {
   // =========================
   // DRAW (use current scene!)
   // =========================
-  //   const clearLaserMarkers = () => {
-  //     const canvas = getCanvas();
-  //     if (!canvas) return;
-  //     window.NAV2D.laser.markers.forEach((m) => { try { canvas.removeChild(m); } catch (e) { } });
-  //     window.NAV2D.laser.markers = [];
-  //   };
-
-  //   const makeDot = (canvas, x, y) => {
-  //     // ✅ BIG + bright + no stroke (no black)
-  //     const dot = new window.ROS2D.NavigationArrow({
-  //       size: 18.0,
-  //       strokeSize: 0.0,
-  //       fillColor: window.createjs.Graphics.getRGB(0, 255, 255, 1.0), // CYAN
-  //       pulse: false,
-  //     });
-
-  //     dot.compositeOperation = "lighter";
-  //     dot.alpha = 1.0;
-
-  //     dot.x = x;
-  //     dot.y = -y;
-
-  //     // keep same size while zooming
-  //     dot.scaleX = 1.0 / (canvas.scaleX || 1.0);
-  //     dot.scaleY = 1.0 / (canvas.scaleY || 1.0);
-
-  //     return dot;
-  //   };
-
-  //   // ✅ expose redraw for tab switching
-  //   window.NAV2D.laser.redraw = () => {
-  //     const canvas = getCanvas();
-  //     if (!canvas) return;
-  //     const pts = window.NAV2D.laser.lastPoints || [];
-  //     if (!pts.length) return;
-
-  //     clearLaserMarkers();
-  //     for (let i = 0; i < pts.length; i++) {
-  //       const p = pts[i];
-  //       const dot = makeDot(canvas, p.x, p.y);
-  //       window.NAV2D.laser.markers.push(dot);
-  //       canvas.addChild(dot);
-  //     }
-  //   };
-
-  //   // =========================
-  //   // LASER SUB
-  //   // =========================
-  //   if (window.NAV2D.laser.scan) {
-  //     try { window.NAV2D.laser.scan.unsubscribe(); } catch (e) { }
-  //     window.NAV2D.laser.scan = null;
-  //   }
-
-  //   const scan = new window.ROSLIB.Topic({
-  //     ros,
-  //     name: scanTopic,
-  //     messageType: "sensor_msgs/msg/LaserScan",
-  //     throttle_rate: 80,
-  //   });
-
-  //   let rx = 0;
-
-  //   scan.subscribe((msg) => {
-  //     rx++;
-  //     if (!window.NAV2D.laser.enabled) return;
-  //     if (rx % DRAW_EVERY_N !== 0) return;
-
-  //     const canvas = getCanvas();
-  //     if (!canvas) return;
-
-  //     const laserFrame = norm(msg?.header?.frame_id);
-  //     if (!laserFrame) return;
-
-  //     const chain1 = [mapFrame, odomFrame, baseLink, baseMid, laserFrame];
-  //     const chain2 = [mapFrame, odomFrame, baseLink, laserFrame];
-  //     const T_map_laser = getChain2D(chain1) || getChain2D(chain2);
-  //     if (!T_map_laser) return;
-
-  //     const ranges = msg.ranges || [];
-  //     const angleMin = msg.angle_min ?? 0;
-  //     const angleInc = msg.angle_increment ?? 0;
-  //     const rMin = msg.range_min ?? 0.05;
-  //     const rMax = msg.range_max ?? 30.0;
-
-  //     const pts = [];
-  //     const step = Math.max(1, Math.floor(ranges.length / MAX_POINTS));
-
-  //     for (let i = 0; i < ranges.length && pts.length < MAX_POINTS; i += step) {
-  //       const r = ranges[i];
-  //       if (!Number.isFinite(r)) continue;
-  //       if (r < rMin || r > rMax) continue;
-
-  //       const a = angleMin + i * angleInc;
-  //       const lx = r * Math.cos(a);
-  //       const ly = r * Math.sin(a);
-
-  //       pts.push(transformPoint2D(T_map_laser, lx, ly));
-  //     }
-
-  //     window.NAV2D.laser.lastPoints = pts;
-  //     window.NAV2D.laser.redraw();
-
-
-  //     // draw to CURRENT canvas
-  //     // window.NAV2D.laser.redraw();
-  //   });
-
-  //   window.NAV2D.laser.scan = scan;
-
-  //   console.log("✅ [LaserOverlay] init complete", { mapFrame, odomFrame, baseLink, baseMid, scanTopic });
-  // };
-
-  // Single shape for performant drawing of the scan cloud and lines
-  if (!window.NAV2D.laser.shape) {
-    window.NAV2D.laser.shape = new window.createjs.Shape();
-    window.NAV2D.laser.shape.name = "laser_cloud";
-  }
-
   const clearLaserMarkers = () => {
-    if (window.NAV2D.laser.shape) {
-      window.NAV2D.laser.shape.graphics.clear();
-    }
+    const canvas = getCanvas();
+    if (!canvas) return;
+    window.NAV2D.laser.markers.forEach((m) => { try { canvas.removeChild(m); } catch (e) { } });
+    window.NAV2D.laser.markers = [];
   };
 
-  // ✅ Expose redraw for tab switching and zoom scaling
-  // window.NAV2D.laser.redraw = () => {
-  //   const canvas = getCanvas();
-  //   if (!canvas) return;
+  const makeDot = (canvas, x, y) => {
+    // ✅ BIG + bright + no stroke (no black)
+    const dot = new window.ROS2D.NavigationArrow({
+      size: 18.0,
+      strokeSize: 0.0,
+      fillColor: window.createjs.Graphics.getRGB(0, 255, 255, 1.0), // CYAN
+      pulse: false,
+    });
 
-  //   // Ensure shape is attached to the current canvas view
-  //   if (window.NAV2D.laser.shape.parent !== canvas) {
-  //     if (window.NAV2D.laser.shape.parent) {
-  //       window.NAV2D.laser.shape.parent.removeChild(window.NAV2D.laser.shape);
-  //     }
-  //     canvas.addChild(window.NAV2D.laser.shape);
-  //   }
+    dot.compositeOperation = "lighter";
+    dot.alpha = 1.0;
 
-  //   const scanData = window.NAV2D.laser.lastScanData;
-  //   if (!scanData) return;
+    dot.x = x;
+    dot.y = -y;
 
-  //   const { origin, polyPts, hitPaths } = scanData;
-  //   const g = window.NAV2D.laser.shape.graphics;
-  //   g.clear();
+    // keep same size while zooming
+    dot.scaleX = 1.0 / (canvas.scaleX || 1.0);
+    dot.scaleY = 1.0 / (canvas.scaleY || 1.0);
 
-  //   const zoom = canvas.scaleX || 1.0;
+    return dot;
+  };
 
-  //   // 1. Draw the "Cloud" (Filled area representing cleared/free space)
-  //   // Using a light Teal/Green tint (identifiable against white, but not overpowering)
-  //   g.beginFill("rgba(32, 178, 170, 0.2)");
-  //   g.moveTo(origin.x, -origin.y);
-  //   for (const pt of polyPts) {
-  //     g.lineTo(pt.x, -pt.y);
-  //   }
-  //   g.lineTo(origin.x, -origin.y);
-  //   g.endFill();
-
-  //   // 2. Draw the Obstructions (Valid laser hits) as dotted lines
-  //   g.setStrokeStyle(2.0 / zoom, "round", "round");
-  //   g.setStrokeDash([6 / zoom, 5 / zoom]); // Dashed effect that scales nicely with zoom
-  //   g.beginStroke("rgba(32, 178, 170, 0.9)"); // Stronger Teal/Green for the boundary
-
-  //   for (const path of hitPaths) {
-  //     if (path.length > 0) {
-  //       g.moveTo(path[0].x, -path[0].y);
-  //       for (let i = 1; i < path.length; i++) {
-  //         g.lineTo(path[i].x, -path[i].y);
-  //       }
-  //     }
-  //   }
-  //   g.endStroke();
-  //   g.setStrokeDash(); // Reset dash
-  // };
-
+  // ✅ expose redraw for tab switching
   window.NAV2D.laser.redraw = () => {
     const canvas = getCanvas();
     if (!canvas) return;
+    const pts = window.NAV2D.laser.lastPoints || [];
+    if (!pts.length) return;
 
-    // Ensure shape is attached to the current canvas view
-    if (window.NAV2D.laser.shape.parent !== canvas) {
-      if (window.NAV2D.laser.shape.parent) {
-        window.NAV2D.laser.shape.parent.removeChild(window.NAV2D.laser.shape);
-      }
-      canvas.addChild(window.NAV2D.laser.shape);
+    clearLaserMarkers();
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      const dot = makeDot(canvas, p.x, p.y);
+      window.NAV2D.laser.markers.push(dot);
+      canvas.addChild(dot);
     }
-
-    const scanData = window.NAV2D.laser.lastScanData;
-    if (!scanData) return;
-
-    const { origin, polyPts, hitPaths } = scanData;
-    const g = window.NAV2D.laser.shape.graphics;
-    g.clear();
-
-    const zoom = canvas.scaleX || 1.0;
-
-    // 1. Draw the "Cloud" (Filled area representing cleared/free space)
-    g.beginFill("rgba(32, 178, 170, 0.2)");
-    g.moveTo(origin.x, -origin.y);
-    for (const pt of polyPts) {
-      g.lineTo(pt.x, -pt.y);
-    }
-    g.lineTo(origin.x, -origin.y);
-    g.endFill();
-
-    // 2. Draw the Obstructions (Valid laser hits) as explicit dots
-    // This avoids the 'setStrokeDash' error in older CreateJS versions
-    const dotRadius = Math.max(0.04, 0.05 / zoom); // Keeps dots visible at any zoom
-    g.beginFill("rgba(32, 178, 170, 0.9)"); // Stronger Teal/Green for the boundary dots
-
-    for (const path of hitPaths) {
-      for (const pt of path) {
-        g.drawCircle(pt.x, -pt.y, dotRadius);
-      }
-    }
-    g.endFill();
   };
+
   // =========================
   // LASER SUB
   // =========================
@@ -799,96 +629,37 @@ const initLaserScanOverlay = (ros) => {
     const rMin = msg.range_min ?? 0.05;
     const rMax = msg.range_max ?? 30.0;
 
-    // Origin of the laser scanner in Map coordinates
-    // const origin = { x: T_map_laser.x, y: T_map_laser.y };
-
-    // const polyPts = [];
-    // const hitPaths = [];
-    // let currentPath = [];
-
-    // const step = Math.max(1, Math.floor(ranges.length / MAX_POINTS));
-
-    // for (let i = 0; i < ranges.length; i += step) {
-    //   let r = ranges[i];
-    //   let isHit = true;
-
-    //   // If the ray hits nothing (infinity/NaN/out-of-range), we stretch the "cloud"
-    //   // to rMax to show the scanned cone, but we break the boundary line
-    //   if (!Number.isFinite(r) || r < rMin || r > rMax) {
-    //     r = rMax;
-    //     isHit = false;
-    //   }
-
-    //   const a = angleMin + i * angleInc;
-    //   const lx = r * Math.cos(a);
-    //   const ly = r * Math.sin(a);
-
-    //   const pt = transformPoint2D(T_map_laser, lx, ly);
-    //   polyPts.push(pt);
-
-    //   // Group continuous hits into paths to draw solid dashed lines along walls
-    //   if (isHit) {
-    //     currentPath.push(pt);
-    //   } else {
-    //     if (currentPath.length > 0) {
-    //       hitPaths.push(currentPath);
-    //       currentPath = [];
-    //     }
-    //   }
-    // }
-
-    // // Push the final path if it exists
-    // if (currentPath.length > 0) hitPaths.push(currentPath);
-
-    const origin = { x: T_map_laser.x, y: T_map_laser.y };
-
-    const polyPts = [];
-    const hitPaths = [];
-    let currentPath = [];
-
+    const pts = [];
     const step = Math.max(1, Math.floor(ranges.length / MAX_POINTS));
 
-    for (let i = 0; i < ranges.length; i += step) {
-      let r = ranges[i];
-      let isHit = true;
-
-      // Check if ray hit nothing (infinity/NaN) or is out of bounds
-      if (!Number.isFinite(r) || r < rMin || r > rMax) {
-        isHit = false;
-        r = 1.5; // Use a short distance (1.5m) for the flashlight cone in open space to prevent map bleeding
-      }
+    for (let i = 0; i < ranges.length && pts.length < MAX_POINTS; i += step) {
+      const r = ranges[i];
+      if (!Number.isFinite(r)) continue;
+      if (r < rMin || r > rMax) continue;
 
       const a = angleMin + i * angleInc;
+      const lx = r * Math.cos(a);
+      const ly = r * Math.sin(a);
 
-      // Calculate coordinate for the visual cloud (capped at 4 meters max so it doesn't bleed over corners)
-      const cloudR = isHit ? Math.min(r, 4.0) : 1.5;
-      const cloudPt = transformPoint2D(T_map_laser, cloudR * Math.cos(a), cloudR * Math.sin(a));
-      polyPts.push(cloudPt);
-
-      // Calculate exact coordinate for the boundary dots (lands exactly on the physical map walls)
-      if (isHit) {
-        const truePt = transformPoint2D(T_map_laser, r * Math.cos(a), r * Math.sin(a));
-        currentPath.push(truePt);
-      } else {
-        if (currentPath.length > 0) {
-          hitPaths.push(currentPath);
-          currentPath = [];
-        }
-      }
+      pts.push(transformPoint2D(T_map_laser, lx, ly));
     }
 
-    // Push the final path if it exists
-    if (currentPath.length > 0) hitPaths.push(currentPath);
-
-    // Save the state and trigger redraw
-    window.NAV2D.laser.lastScanData = { origin, polyPts, hitPaths };
+    window.NAV2D.laser.lastPoints = pts;
     window.NAV2D.laser.redraw();
+
+
+    // draw to CURRENT canvas
+    // window.NAV2D.laser.redraw();
   });
 
   window.NAV2D.laser.scan = scan;
 
   console.log("✅ [LaserOverlay] init complete", { mapFrame, odomFrame, baseLink, baseMid, scanTopic });
 };
+
+
+
+
 
 const initLaserScanOverlay_ScanOnly = (ros) => {
   console.log("✅ [ScanOnly] initLaserScanOverlay_ScanOnly called");
