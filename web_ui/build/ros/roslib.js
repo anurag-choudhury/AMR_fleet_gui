@@ -455,10 +455,10 @@
               var isArray = Array.isArray
                 ? Array.isArray
                 : function _isArray(obj) {
-                    return (
-                      Object.prototype.toString.call(obj) === "[object Array]"
-                    );
-                  };
+                  return (
+                    Object.prototype.toString.call(obj) === "[object Array]"
+                  );
+                };
               var defaultMaxListeners = 10;
               var nextTickSupported =
                 typeof process == "object" &&
@@ -473,10 +473,10 @@
                 ? reflectSupported && typeof Reflect.ownKeys === "function"
                   ? Reflect.ownKeys
                   : function (obj) {
-                      var arr = Object.getOwnPropertyNames(obj);
-                      arr.push.apply(arr, Object.getOwnPropertySymbols(obj));
-                      return arr;
-                    }
+                    var arr = Object.getOwnPropertyNames(obj);
+                    arr.push.apply(arr, Object.getOwnPropertySymbols(obj));
+                    return arr;
+                  }
                 : Object.keys;
 
               function init() {
@@ -746,9 +746,9 @@
                 function reject(reason) {
                   throw Error(
                     'Invalid "' +
-                      option +
-                      '" option value' +
-                      (reason ? ". Reason: " + reason : ""),
+                    option +
+                    '" option value' +
+                    (reason ? ". Reason: " + reason : ""),
                   );
                 }
 
@@ -1381,17 +1381,17 @@
                       ? nextTick
                         ? Promise.resolve()
                         : new Promise(function (resolve) {
-                            _setImmediate(resolve);
-                          }).then(function () {
-                            context.event = event;
-                            return _listener.apply(context, args);
-                          })
+                          _setImmediate(resolve);
+                        }).then(function () {
+                          context.event = event;
+                          return _listener.apply(context, args);
+                        })
                       : (nextTick ? process.nextTick : _setImmediate)(
-                          function () {
-                            context.event = event;
-                            _listener.apply(context, args);
-                          },
-                        );
+                        function () {
+                          context.event = event;
+                          _listener.apply(context, args);
+                        },
+                      );
                   };
 
                   listener._async = true;
@@ -1472,8 +1472,8 @@
                 isArray(events)
                   ? listen(toObject(events))
                   : typeof events === "string"
-                  ? listen(toObject(events.split(/\s+/)))
-                  : listen(events);
+                    ? listen(toObject(events.split(/\s+/)))
+                    : listen(events);
 
                 return this;
               };
@@ -2111,12 +2111,12 @@
 
                 if (this.wildcard) {
                   var leafs = searchListenerTree.call(
-                      this,
-                      null,
-                      type,
-                      this.listenerTree,
-                      0,
-                    ),
+                    this,
+                    null,
+                    type,
+                    this.listenerTree,
+                    0,
+                  ),
                     leaf,
                     i;
                   if (!leafs) return this;
@@ -2197,15 +2197,15 @@
                 var _events = this._events;
                 return this.wildcard
                   ? collectTreeEvents.call(
-                      this,
-                      this.listenerTree,
-                      [],
-                      null,
-                      nsAsArray,
-                    )
+                    this,
+                    this.listenerTree,
+                    [],
+                    null,
+                    nsAsArray,
+                  )
                   : _events
-                  ? ownKeys(_events)
-                  : [];
+                    ? ownKeys(_events)
+                    : [];
               };
 
               EventEmitter.prototype.listenerCount = function (type) {
@@ -2492,31 +2492,31 @@
         module.exports = shouldUseNative()
           ? Object.assign
           : function (target, source) {
-              var from;
-              var to = toObject(target);
-              var symbols;
+            var from;
+            var to = toObject(target);
+            var symbols;
 
-              for (var s = 1; s < arguments.length; s++) {
-                from = Object(arguments[s]);
+            for (var s = 1; s < arguments.length; s++) {
+              from = Object(arguments[s]);
 
-                for (var key in from) {
-                  if (hasOwnProperty.call(from, key)) {
-                    to[key] = from[key];
-                  }
-                }
-
-                if (getOwnPropertySymbols) {
-                  symbols = getOwnPropertySymbols(from);
-                  for (var i = 0; i < symbols.length; i++) {
-                    if (propIsEnumerable.call(from, symbols[i])) {
-                      to[symbols[i]] = from[symbols[i]];
-                    }
-                  }
+              for (var key in from) {
+                if (hasOwnProperty.call(from, key)) {
+                  to[key] = from[key];
                 }
               }
 
-              return to;
-            };
+              if (getOwnPropertySymbols) {
+                symbols = getOwnPropertySymbols(from);
+                for (var i = 0; i < symbols.length; i++) {
+                  if (propIsEnumerable.call(from, symbols[i])) {
+                    to[symbols[i]] = from[symbols[i]];
+                  }
+                }
+              }
+            }
+
+            return to;
+          };
       },
       {},
     ],
@@ -2685,7 +2685,7 @@
         process.version = ""; // empty string to avoid regexp issues
         process.versions = {};
 
-        function noop() {}
+        function noop() { }
 
         process.on = noop;
         process.addListener = noop;
@@ -2749,7 +2749,7 @@
               this._id = id;
               this._clearFn = clearFn;
             }
-            Timeout.prototype.unref = Timeout.prototype.ref = function () {};
+            Timeout.prototype.unref = Timeout.prototype.ref = function () { };
             Timeout.prototype.close = function () {
               this._clearFn.call(window, this._id);
             };
@@ -2781,35 +2781,35 @@
               typeof setImmediate === "function"
                 ? setImmediate
                 : function (fn) {
-                    var id = nextImmediateId++;
-                    var args =
-                      arguments.length < 2 ? false : slice.call(arguments, 1);
+                  var id = nextImmediateId++;
+                  var args =
+                    arguments.length < 2 ? false : slice.call(arguments, 1);
 
-                    immediateIds[id] = true;
+                  immediateIds[id] = true;
 
-                    nextTick(function onNextTick() {
-                      if (immediateIds[id]) {
-                        // fn.call() is faster so we optimize for the common use-case
-                        // @see http://jsperf.com/call-apply-segu
-                        if (args) {
-                          fn.apply(null, args);
-                        } else {
-                          fn.call(null);
-                        }
-                        // Prevent ids from leaking
-                        exports.clearImmediate(id);
+                  nextTick(function onNextTick() {
+                    if (immediateIds[id]) {
+                      // fn.call() is faster so we optimize for the common use-case
+                      // @see http://jsperf.com/call-apply-segu
+                      if (args) {
+                        fn.apply(null, args);
+                      } else {
+                        fn.call(null);
                       }
-                    });
+                      // Prevent ids from leaking
+                      exports.clearImmediate(id);
+                    }
+                  });
 
-                    return id;
-                  };
+                  return id;
+                };
 
             exports.clearImmediate =
               typeof clearImmediate === "function"
                 ? clearImmediate
                 : function (id) {
-                    delete immediateIds[id];
-                  };
+                  delete immediateIds[id];
+                };
           }).call(this);
         }).call(
           this,
@@ -2873,8 +2873,8 @@
                 /******/ configurable: false,
                 /******/ enumerable: true,
                 /******/ get: getter,
-                /******/
-              });
+            /******/
+          });
               /******/
             }
             /******/
@@ -2883,8 +2883,8 @@
           /******/ // define __esModule on exports
           /******/ __webpack_require__.r = function (exports) {
             /******/ Object.defineProperty(exports, "__esModule", {
-              value: true,
-            });
+            value: true,
+          });
             /******/
           };
 
@@ -2893,11 +2893,11 @@
             /******/ var getter =
               module && module.__esModule
                 ? /******/ function getDefault() {
-                    return module["default"];
-                  }
+                  return module["default"];
+                }
                 : /******/ function getModuleExports() {
-                    return module;
-                  };
+                  return module;
+                };
             /******/ __webpack_require__.d(getter, "a", getter);
             /******/ return getter;
             /******/
@@ -2959,11 +2959,11 @@
           // dll deps
           re = new RegExp(
             "\\(" +
-              quoteRegExp(webpackRequireName) +
-              '\\("(dll-reference\\s(' +
-              moduleNameReqExp +
-              '))"\\)\\)' +
-              dependencyRegExp,
+            quoteRegExp(webpackRequireName) +
+            '\\("(dll-reference\\s(' +
+            moduleNameReqExp +
+            '))"\\)\\)' +
+            dependencyRegExp,
             "g",
           );
           while ((match = re.exec(fnString))) {
@@ -3162,12 +3162,12 @@
           scache[wkey] = wkey;
           sources[skey] = [
             "function(require,module,exports){" +
-              // try to call default if defined to also support babel esmodule exports
-              "var f = require(" +
-              stringify(wkey) +
-              ");" +
-              "(f.default ? f.default : f)(self);" +
-              "}",
+            // try to call default if defined to also support babel esmodule exports
+            "var f = require(" +
+            stringify(wkey) +
+            ");" +
+            "(f.default ? f.default : f)(self);" +
+            "}",
             scache,
           ];
 
@@ -3274,10 +3274,10 @@
           typeof global !== "undefined"
             ? global
             : typeof self !== "undefined"
-            ? self
-            : typeof window !== "undefined"
-            ? window
-            : {},
+              ? self
+              : typeof window !== "undefined"
+                ? window
+                : {},
         );
       },
       { "./RosLib": 8 },
@@ -5198,7 +5198,7 @@
             this.emit(
               "warning",
               this.compression +
-                " compression is not supported. No compression will be used.",
+              " compression is not supported. No compression will be used.",
             );
             this.compression = "none";
           }
@@ -5521,9 +5521,9 @@
         Quaternion.prototype.norm = function () {
           return Math.sqrt(
             this.x * this.x +
-              this.y * this.y +
-              this.z * this.z +
-              this.w * this.w,
+            this.y * this.y +
+            this.z * this.z +
+            this.w * this.w,
           );
         };
 
@@ -5533,9 +5533,9 @@
         Quaternion.prototype.normalize = function () {
           var l = Math.sqrt(
             this.x * this.x +
-              this.y * this.y +
-              this.z * this.z +
-              this.w * this.w,
+            this.y * this.y +
+            this.z * this.z +
+            this.w * this.w,
           );
           if (l === 0) {
             this.x = 0;
@@ -5943,7 +5943,7 @@
             frameID = frameID.substring(1);
           }
           var info = this.frameInfos[frameID];
-          for (var cbs = (info && info.cbs) || [], idx = cbs.length; idx--; ) {
+          for (var cbs = (info && info.cbs) || [], idx = cbs.length; idx--;) {
             if (cbs[idx] === callback) {
               cbs.splice(idx, 1);
             }

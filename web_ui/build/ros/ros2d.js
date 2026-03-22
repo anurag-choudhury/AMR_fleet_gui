@@ -244,7 +244,7 @@ ROS2D.OccupancyGridClient = function (options) {
   var that = this;
   options = options || {};
   var ros = options.ros;
-  var topic = options.topic || "/map";
+  var topic = options.topic || "/map_gui";
   this.continuous = options.continuous;
   this.rootObject = options.rootObject || new createjs.Container();
 
@@ -258,8 +258,9 @@ ROS2D.OccupancyGridClient = function (options) {
   // subscribe to the topic
   var rosTopic = new ROSLIB.Topic({
     ros: ros,
-    name: "/map",
+    name: topic,
     messageType: "nav_msgs/msg/OccupancyGrid",
+    compression: "cbor",
     // compression: "png",
   });
   rosTopic.subscribe(function (message) {

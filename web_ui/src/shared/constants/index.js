@@ -15,13 +15,13 @@ export const AppConfig = {
   SET_POINT: "/may_set_point",
   WP_REQ: "/WP_req",
   SENSORS_TOPIC: "/sensors",
-  BATTERY_TOPIC: "/battery_status",
+  BATTERY_TOPIC: "/battery/status",
   CHARGE_STATION_CONNECTED: "/charge_station_connected",
-  NAV2_MAP_TOPIC: "/map",
+  NAV2_MAP_TOPIC: "/map_gui",
   NAV2_MAP_FRAME: "map",
   NAV2_INITIAL_POSE_TOPIC: "/initialpose",
   MAX_LINEAR_SPEED: 0.5,
   MAX_ANGULAR_SPEED: 3.5,
-  LASER_SCAN_TOPIC: '/filtered_scan',
+  LASER_SCAN_TOPIC: '/laser/scan',
   // LASER_SCAN_TOPIC: '/scan'
 };

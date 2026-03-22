@@ -38,7 +38,7 @@ const Map = forwardRef((props, ref) => {
   const mapUpdateTopic = useRef(
     new window.ROSLIB.Topic({
       ros,
-      name: "/map",
+      name: AppConfig.NAV2_MAP_TOPIC,
       messageType: "nav_msgs/msg/OccupancyGrid",
     }),
   );

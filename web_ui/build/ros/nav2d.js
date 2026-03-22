@@ -210,6 +210,7 @@ const intervalId = setInterval(window.NAV2D.checkScale, 400);
 
 window.NAV2D.InitMap = (ros) => {
   console.log("Initializing map...");
+  // const topic = "/map_gui";
   const topic = window.AppConfig.NAV2_MAP_TOPIC;
 
   /* Setup a client to get the map */
@@ -555,13 +556,13 @@ const initLaserScanOverlay = (ros) => {
   const makeDot = (canvas, x, y) => {
     // ✅ BIG + bright + no stroke (no black)
     const dot = new window.ROS2D.NavigationArrow({
-      size: 18.0,
+      size: 6.0,
       strokeSize: 0.0,
-      fillColor: window.createjs.Graphics.getRGB(0, 255, 255, 1.0), // CYAN
+      fillColor: window.createjs.Graphics.getRGB(255, 0, 0, 1.0), // CYAN
       pulse: false,
     });
 
-    dot.compositeOperation = "lighter";
+    dot.compositeOperation = "screen";
     dot.alpha = 1.0;
 
     dot.x = x;
