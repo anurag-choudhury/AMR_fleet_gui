@@ -1,6 +1,0 @@
-active:
-  group: nono
-  map: master
-  route: master-route
-map_file: /home/anurag/Desktop/code/OpenAMR_UI_package/install/ui_package/share/ui_package/maps/nono/master.yaml
-route_file: /home/anurag/Desktop/code/OpenAMR_UI_package/install/ui_package/share/ui_package/paths/nono/master/master-route.csv

@@ -45,12 +45,19 @@ def generate_launch_description():
             name='ui_way_points_handler',
             output='screen'
         )
+    map_downsampler = launch_ros.actions.Node(
+            package='ui_package',
+            executable='gui_map_downsampler.py',
+            name='map_downsampler',
+            output='screen'
+        )
 
     # Create the launch description
     return LaunchDescription([
         folder_handler_node,
         rosbridge_server,
         way_points_navigation_launch,
+        map_downsampler,
         flask_launch
     #      ExecuteProcess(
     #      cmd=['python3', flask_script],

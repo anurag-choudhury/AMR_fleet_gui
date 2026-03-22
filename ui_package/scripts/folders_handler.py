@@ -57,8 +57,8 @@ class UIFoldersHandler(Node):
         self.declare_parameter("odom_topic", "/odom")
 
         # Launch strings
-        self.declare_parameter("mappingLaunch", "amr_nav rtab.launch.py")
-        self.declare_parameter("navigationLaunch", "amr_nav navigation.launch.py")
+        self.declare_parameter("mappingLaunch", "mr_robot_nav rtab.launch.py")
+        self.declare_parameter("navigationLaunch", "mr_robot_nav navigation.launch.py")
 
         # Demo defaults
         self.declare_parameter("demo_group", "nan")
@@ -473,38 +473,52 @@ class UIFoldersHandler(Node):
         except Exception as e:
             self._ui_warn("RTAB_FORCE_KILL_FAIL", "Force stop failed.", err=str(e))
     def _stop_rtabmap(self):
+        self.get_logger().info("--- Executing _stop_rtabmap ---")
         try:
-            self._ui_info("RTAB_STOP_REQ", "Stopping RTAB-Map...")
+            self._ui_info("RTAB_STOP_REQ", "Stopping RTAB-Map gracefully...")
+
+            # Phase 1: Try to stop the specific process group we started
             if self.slam_proc is not None:
-                if self.slam_proc.poll() is not None:
-                    self.slam_proc = None
-                    return
-
-                pid = self.slam_proc.pid
-                pgid = os.getpgid(pid)
-
-                self._ui_info("RTAB_STOP_REQ", "Stopping RTAB-Map...", pid=pid)
-
-                os.killpg(pgid, signal.SIGINT)
-
-                try:
-                    self.slam_proc.wait(timeout=3.0)
-                    self._ui_info("RTAB_STOPPED", "RTAB-Map stopped.")
-                    self.slam_proc = None
-                    return
-                except:
-                    pass
-
-                os.killpg(pgid, signal.SIGKILL)
-                self._ui_warn("RTAB_KILLED", "RTAB-Map killed.")
+                if self.slam_proc.poll() is None:
+                    pid = self.slam_proc.pid
+                    try:
+                        pgid = os.getpgid(pid)
+                        self.get_logger().info(f"Sending SIGINT to process group {pgid}")
+                        os.killpg(pgid, signal.SIGINT)
+                        
+                        # Wait for graceful shutdown (RTAB-Map needs a few seconds to save the database)
+                        try:
+                            self.slam_proc.wait(timeout=4.0)
+                            self.get_logger().info("RTAB-Map stopped cleanly via SIGINT.")
+                        except subprocess.TimeoutExpired:
+                            self.get_logger().warn("RTAB-Map ignored SIGINT. Escalating to SIGKILL on process group.")
+                            os.killpg(pgid, signal.SIGKILL)
+                            self.slam_proc.wait(timeout=2.0)
+                    except Exception as e:
+                        self.get_logger().error(f"Error managing process group: {e}")
+                
+                # Clear the process handle
                 self.slam_proc = None
-                return
 
-            # fallback
-            if self._detect_rtabmap_running():
-                self._force_kill_rtabmap()
+            # Phase 2: The "Real Robust" Cleanup
+            # Hunt down any orphaned rtabmap processes, even if self.slam_proc was None
+            if self._detect_rtabmap_running() or self.allow_force_kill_slam:
+                self.get_logger().warn("Checking for lingering RTAB-Map processes...")
+                
+                # Send a gentle system-wide kill first to allow database saving for standalone nodes
+                subprocess.call("pkill -SIGINT -f rtabmap >/dev/null 2>&1", shell=True)
+                time.sleep(1.5) # Buffer to allow SQLite to finish writing
+                
+                # The Final Nuke: Wipe out anything that survived
+                subprocess.call("pkill -SIGKILL -f rtabmap >/dev/null 2>&1", shell=True)
+                subprocess.call("pkill -SIGKILL -f rtabmap_launch >/dev/null 2>&1", shell=True)
+                self.get_logger().info("System pkill sweep complete.")
+                
+            self._ui_info("RTAB_STOPPED", "RTAB-Map has been completely stopped.")
+            self.get_logger().info("--- RTAB-Map Stop Sequence Complete ---")
 
         except Exception as e:
+            self.get_logger().error(f"EXCEPTION in _stop_rtabmap: {str(e)}")
             self._ui_warn("RTAB_STOP_FAIL", "Failed stopping RTAB-Map.", err=str(e))
 
     def _start_rtabmap(self):
@@ -717,7 +731,8 @@ class UIFoldersHandler(Node):
             cmd = f"ros2 run nav2_map_server map_saver_cli -f {map_path_base}"
             rc = os.system(cmd)
             if rc != 0:
-                self._ui_error("MAP_SAVE_FAIL", "Map save failed. You can 'cancel_mapping' to exit mapping mode.", rc=rc)
+                self._ui_error("MAP_SAVE_FAIL", "Map save failed", rc=rc)
+                self.cancel_mapping_func()
                 return
 
             # Set active map; reset route

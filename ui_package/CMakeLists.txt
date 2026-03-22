@@ -87,6 +87,7 @@ install(FILES
 install(PROGRAMS
   scripts/folders_handler.py
   scripts/way_points_handler.py
+  scripts/gui_map_downsampler.py
   src/flask_app.py
   DESTINATION lib/${PROJECT_NAME}
 )
